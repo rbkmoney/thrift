@@ -541,7 +541,22 @@ validate(_Req, {string, Value}, _Path) when is_binary(Value) ->
     ok;
 validate(_Req, {bool, Value}, _Path) when is_boolean(Value) ->
     ok;
-validate(_Req, {_Type, Value}, _Path) when is_number(Value) ->
+validate(_Req, {byte, Value}, _Path)
+  when is_integer(Value), Value >= -(1 bsl 7), Value < (1 bsl 7) ->
+    ok;
+validate(_Req, {i8,  Value}, _Path)
+  when is_integer(Value), Value >= -(1 bsl 7), Value < (1 bsl 7) ->
+    ok;
+validate(_Req, {i16, Value}, _Path)
+  when is_integer(Value), Value >= -(1 bsl 15), Value < (1 bsl 15) ->
+    ok;
+validate(_Req, {i32, Value}, _Path)
+  when is_integer(Value), Value >= -(1 bsl 31), Value < (1 bsl 31) ->
+    ok;
+validate(_Req, {i64, Value}, _Path)
+  when is_integer(Value), Value >= -(1 bsl 63), Value < (1 bsl 63) ->
+    ok;
+validate(_Req, {double, Value}, _Path) when is_float(Value) ->
     ok;
 validate(_Req, {Type, Value}, Path) ->
     throw({invalid, Path, Type, Value}).
