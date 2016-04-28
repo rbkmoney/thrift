@@ -30,6 +30,8 @@
 #include "platform.h"
 #include "version.h"
 
+#define OUT_FILE_SUFFIX "_thrift"
+
 using std::map;
 using std::ofstream;
 using std::ostream;
@@ -50,7 +52,8 @@ public:
                   const std::string& option_string)
     : t_generator(program)
     , idiomatic_names_(false)
-    , scoped_typenames_(false) {
+    , scoped_typenames_(false)
+    , app_prefix_("") {
     (void)option_string;
     std::map<std::string, std::string>::const_iterator iter;
 
@@ -61,6 +64,10 @@ public:
       }
       if (iter->first.compare("scoped_typenames") == 0) {
         scoped_typenames_ = true;
+        continue;
+      }
+      if(iter->first.compare("app_prefix") == 0) {
+        app_prefix_ = (iter->second) + "_";
         continue;
       }
       throw "unknown option:" + iter->first;
@@ -116,6 +123,7 @@ private:
    */
   bool idiomatic_names_;
   bool scoped_typenames_;
+  std::string app_prefix_;
 
   bool has_default_value(t_field*);
 
@@ -135,14 +143,14 @@ private:
   static std::string render_export_type(std::string, int);
   static std::string render_attribute_list(std::string, std::string);
   static std::string render_attribute(std::string, std::string);
-  static std::string render_include(t_program* p);
+  std::string render_include(t_program* p);
 
   std::string render_includes();
   std::string render_default_value(t_field* field);
-  std::string render_member_value(t_field* field);
+  std::string render_member_value(std::string name, t_field* field);
   std::string render_member_type(t_field* field);
   std::string render_type(t_type* type);
-  std::string render_const_value(t_type* type, t_const_value* value);
+  std::string render_const_value(t_type* type, std::string name, t_const_value* value);
   std::string render_type_term(t_type* ttype, bool expand_structs, indenter& ind);
 
   template <class Type>
@@ -153,7 +161,7 @@ private:
    */
   void generate_struct(t_struct* tstruct, bool is_exception);
   void generate_struct_definition(std::ostream& out, t_struct* tstruct);
-  void generate_struct_member(std::ostream& out, t_field* tmember);
+  void generate_struct_member(std::ostream& out, std::string name, t_field* tmember);
   void generate_struct_info(std::ostream& out, t_struct* tstruct);
   void generate_typespecs(std::ostream& out);
   void generate_enum_info(std::ostream& out, t_enum* tenum);
@@ -192,8 +200,12 @@ private:
     return modulify(program_);
   }
 
-  static std::string modulify(t_program* p) {
-    return render_namespaced(p, underscore(p->get_name()));
+  std::string modulify(t_program* p) {
+    return app_prefix_ + underscore(p->get_name());
+  }
+
+  std::string scopify(std::string in) {
+    return scoped_typenames_ ? render_namespaced(get_program(), in) : in;
   }
 
   static std::string atomify(std::string in) {
@@ -225,7 +237,7 @@ void t_erlang_generator::init_generator() {
   MKDIR(get_out_dir().c_str());
 
   // types files
-  string base_name = modulify() + "_types";
+  string base_name = modulify() + OUT_FILE_SUFFIX;
   string f_erl_filename = get_out_dir() + base_name + ".erl";
   string f_hrl_filename = get_out_dir() + base_name + ".hrl";
 
@@ -270,7 +282,7 @@ string t_erlang_generator::render_includes() {
 }
 
 string t_erlang_generator::render_include(t_program* p) {
-  return render_include(modulify(p) + "_types.hrl");
+  return render_include(modulify(p) + OUT_FILE_SUFFIX + ".hrl");
 }
 
 /**
@@ -336,16 +348,19 @@ void t_erlang_generator::generate_type_list(
   indenter i;
   os << "-spec " << function_name << "() -> [" << el_type << "]." << endl << endl
      << function_name << "() ->" << i.nlup()
-     << "[" << i.nlup();
+     << "[";
 
-  for (size_t j = 0; j < types.size();) {
-    os << type_name(types[j]);
-    if (++j != types.size()) {
-      os << "," << i.nl();
+  if (types.size() > 0) {
+    os << i.nlup();
+    for (size_t j = 0; j < types.size();) {
+      os << type_name(types[j]);
+      if (++j != types.size()) {
+        os << "," << i.nl();
+      }
     }
+    os << i.nldown();
   }
-
-  os << i.nldown() << "]." << endl << endl;
+  os << "]." << endl << endl;
 }
 
 /**
@@ -426,8 +441,8 @@ void t_erlang_generator::generate_enum_metadata(std::ostream& os) {
  * Generate a constant value
  */
 void t_erlang_generator::generate_const(t_const* tconst) {
-  f_hrl_file_ << "-define(" << constify(modulify() + "_" + tconst->get_name()) << ", "
-              << render_const_value(tconst->get_type(), tconst->get_value()) << ")."
+  f_hrl_file_ << "-define(" << constify(scopify(tconst->get_name())) << ", "
+              << render_const_value(tconst->get_type(), tconst->get_name(), tconst->get_value()) << ")."
               << endl;
 }
 
@@ -436,7 +451,7 @@ void t_erlang_generator::generate_const(t_const* tconst) {
  * is NOT performed in this function as it is always run beforehand using the
  * validate_types method in main.cc
  */
-string t_erlang_generator::render_const_value(t_type* type, t_const_value* value) {
+string t_erlang_generator::render_const_value(t_type* type, std::string name, t_const_value* value) {
   type = get_true_type(type);
   std::ostringstream out;
 
@@ -444,7 +459,7 @@ string t_erlang_generator::render_const_value(t_type* type, t_const_value* value
     t_base_type::t_base tbase = ((t_base_type*)type)->get_base();
     switch (tbase) {
     case t_base_type::TYPE_STRING:
-      out << "<<\"" << get_escaped_string(value) << "\">>";
+      out << '"' << get_escaped_string(value) << '"';
       break;
     case t_base_type::TYPE_BOOL:
       out << (value->get_integer() > 0 ? "true" : "false");
@@ -467,7 +482,30 @@ string t_erlang_generator::render_const_value(t_type* type, t_const_value* value
     }
   } else if (type->is_enum()) {
     indent(out) << value->get_integer();
-
+  } else if (type->is_struct() && ((t_struct*)type)->is_union()) {
+    const map<t_const_value*, t_const_value*>& val = value->get_map();
+    map<t_const_value*, t_const_value*>::const_iterator v_iter = val.begin();
+    if (val.size() != 1) {
+      throw "compiler error: '" + name + "' - only one member is allowed for Union type";
+    }
+    out << "{";
+    const vector<t_field*>& fields = ((t_struct*)type)->get_members();
+    vector<t_field*>::const_iterator f_iter;
+      t_type* field_type = NULL;
+      for (f_iter = fields.begin(); f_iter != fields.end(); ++f_iter) {
+        if ((*f_iter)->get_name() == v_iter->first->get_string()) {
+          field_type = (*f_iter)->get_type();
+          break;
+        }
+      }
+      if (field_type == NULL) {
+        throw "type error: " + type->get_name() + " has no field " + v_iter->first->get_string();
+      }
+      out << v_iter->first->get_string();
+      out << ", ";
+      out << render_const_value(field_type, name + "." + v_iter->first->get_string(), v_iter->second);
+    indent_down();
+    indent(out) << "}";
   } else if (type->is_struct() || type->is_xception()) {
     out << "#" << type_name(type) << "{";
     const vector<t_field*>& fields = ((t_struct*)type)->get_members();
@@ -494,7 +532,7 @@ string t_erlang_generator::render_const_value(t_type* type, t_const_value* value
       }
       out << v_iter->first->get_string();
       out << " = ";
-      out << render_const_value(field_type, v_iter->second);
+      out << render_const_value(field_type, name + "." + v_iter->first->get_string(), v_iter->second);
     }
     indent_down();
     indent(out) << "}";
@@ -506,8 +544,8 @@ string t_erlang_generator::render_const_value(t_type* type, t_const_value* value
     out << "#{";
     map<t_const_value*, t_const_value*>::const_iterator i, end = value->get_map().end();
     for (i = value->get_map().begin(); i != end;) {
-      out << render_const_value(ktype, i->first) << " => "
-          << render_const_value(vtype, i->second);
+      out << render_const_value(ktype, name + "." + ktype->get_name(), i->first) << " => "
+          << render_const_value(vtype, name + "." + vtype->get_name(), i->second);
       if (++i != end) {
         out << ", ";
       }
@@ -518,7 +556,7 @@ string t_erlang_generator::render_const_value(t_type* type, t_const_value* value
     out << "ordsets:from_list([";
     vector<t_const_value*>::const_iterator i, end = value->get_list().end();
     for (i = value->get_list().begin(); i != end;) {
-      out << render_const_value(etype, *i);
+      out << render_const_value(etype, name + "." + etype->get_name(), *i);
       if (++i != end) {
         out << ",";
       }
@@ -538,7 +576,7 @@ string t_erlang_generator::render_const_value(t_type* type, t_const_value* value
       } else {
         out << ",";
       }
-      out << render_const_value(etype, *v_iter);
+      out << render_const_value(etype, name + "." + etype->get_name(), *v_iter);
     }
     out << "]";
   } else {
@@ -627,7 +665,9 @@ void t_erlang_generator::generate_struct_metadata(std::ostream& erl, std::ostrea
   vec const& xceptions = get_program()->get_xceptions();
   for(vec::const_iterator it = structs.begin(); it != xceptions.end();) {
     generate_struct_info(erl, *it);
-    generate_struct_definition(hrl, *it);
+    if (!(*it)->is_union()) {
+      generate_struct_definition(hrl, *it);
+    }
     if (++it == structs.end()) {
       it = xceptions.begin();
     }
@@ -648,7 +688,7 @@ void t_erlang_generator::generate_struct_definition(ostream& out, t_struct* tstr
 
   vector<t_field*> const& members = tstruct->get_members();
   for (vector<t_field*>::const_iterator it = members.begin(); it != members.end();) {
-    generate_struct_member(out, *it);
+    generate_struct_member(out, type_name(tstruct), *it);
     if (++it != members.end()) {
       out << "," << i.nl();
     }
@@ -662,10 +702,10 @@ void t_erlang_generator::generate_struct_definition(ostream& out, t_struct* tstr
  * Generates the record field definition
  */
 
-void t_erlang_generator::generate_struct_member(ostream& out, t_field* tmember) {
+void t_erlang_generator::generate_struct_member(ostream& out, std::string name, t_field* tmember) {
   out << field_name(tmember);
   if (has_default_value(tmember))
-    out << " = " << render_member_value(tmember);
+    out << " = " << render_member_value(name + "." + field_name(tmember), tmember);
   out << " :: " << render_member_type(tmember);
 }
 
@@ -687,11 +727,11 @@ bool t_erlang_generator::has_default_value(t_field* field) {
   }
 }
 
-string t_erlang_generator::render_member_value(t_field* field) {
+string t_erlang_generator::render_member_value(std::string name, t_field* field) {
   if (!field->get_value()) {
     return render_default_value(field);
   } else {
-    return render_const_value(field->get_type(), field->get_value());
+    return render_const_value(field->get_type(), name, field->get_value());
   }
 }
 
@@ -894,7 +934,7 @@ std::string t_erlang_generator::render_string(Type const& v) {
 string t_erlang_generator::type_name(t_type* ttype) {
   string const& n = ttype->get_name();
   string result = idiomatic_names_ ? underscore(n) : n;
-  return atomify(scoped_typenames_ ? render_namespaced(get_program(), result) : result);
+  return atomify(scopify(result));
 }
 
 string t_erlang_generator::service_name(t_service* tservice) {
@@ -1006,13 +1046,13 @@ std::string t_erlang_generator::render_type_term(t_type* type,
       for (i = fields.begin(); i != end;) {
         t_struct::members_type::value_type member = *i;
         int32_t key = member->get_key();
-        string type = render_type_term(member->get_type(), false, ind); // recursive call
+        string type_term = render_type_term(member->get_type(), false, ind); // recursive call
 
         // Convert to format: {struct, [{Fid, Req, Type, Name, Def}|...]}
         string name = field_name(member);
-        string value = render_member_value(member);
+        string value = render_member_value(type_name(type) + "." + name, member);
         string requiredness = render_member_requiredness(member);
-        buf << "{" << key << ", " << requiredness << ", " << type << ", " << name << ", " << value << "}";
+        buf << "{" << key << ", " << requiredness << ", " << type_term << ", " << name << ", " << value << "}";
 
         if (++i != end) {
           buf << "," << ind.nl();
@@ -1042,7 +1082,7 @@ std::string t_erlang_generator::render_type_term(t_type* type,
 }
 
 std::string t_erlang_generator::type_module(t_type* ttype) {
-  return modulify(ttype->get_program()) + "_types";
+  return modulify(ttype->get_program()) + OUT_FILE_SUFFIX;
 }
 
 /**
@@ -1061,5 +1101,7 @@ string t_erlang_generator::erl_autogen_comment() {
 THRIFT_REGISTER_GENERATOR(
   erlang,
   "Erlang",
-  "    idiomatic: Adapt every name to look idiomatically correct in Erlang (i.e. snake case).\n"
+  "    idiomatic:        Adapt every name to look idiomatically correct in Erlang (i.e. snake case).\n"
+  "    scoped_typenames: Prefix generated Erlang records with the namespace defined for erl.\n"
+  "    app_prefix=       Application prefix for generated Erlang files.\n"
 )
