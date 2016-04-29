@@ -160,10 +160,14 @@ private:
    * Struct generation code
    */
   void generate_struct(t_struct* tstruct, bool is_exception);
+  void generate_union_definition(std::ostream& out, t_struct* tstruct);
   void generate_struct_definition(std::ostream& out, t_struct* tstruct);
   void generate_struct_member(std::ostream& out, std::string name, t_field* tmember);
   void generate_struct_info(std::ostream& out, t_struct* tstruct);
   void generate_typespecs(std::ostream& out);
+  void generate_typespec_type_ref(std::ostream& os);
+  void generate_typescpec_function_name(std::ostream& os);
+  void generate_typescpec_enum_choice(std::ostream& os);
   void generate_enum_info(std::ostream& out, t_enum* tenum);
   void generate_typedef_info(std::ostream& os, t_typedef*);
   void generate_typedef_type(std::ostream& os, t_typedef*);
@@ -172,9 +176,13 @@ private:
   void generate_enum_metadata(std::ostream& out);
 
   template <class Type>
+  void iterate_type(std::ostream& os, vector<Type*> type, std::string delim, std::string end, indenter i);
+  template <class Type>
   void generate_type_list(
     std::ostream& out, std::string function_name, std::string el_type, vector<Type*> types
   );
+  template <class Type>
+  void generate_typespec_list(std::ostream& os, std::string type_name, vector<Type*> types);
 
   /**
    * Service-level generation functions
@@ -309,14 +317,14 @@ void t_erlang_generator::close_generator() {
 
 void t_erlang_generator::generate_typespecs(std::ostream& os) {
   indenter i;
-  os << "-type type_ref() :: {module(), atom()}." << endl
-     << "-type enum_name() :: atom()." << endl
-     << "-type enum_choice() :: atom()." << endl
-     << "-type typedef_name() :: atom()." << endl
-     << "-type struct_name() :: atom()." << endl
-     << "-type struct_flavor() :: struct | exception | union." << endl
-     << "-type service_name() :: atom()." << endl
-     << "-type function_name() :: atom()." << endl
+  generate_typespec_type_ref(os);
+  generate_typespec_list(os, "typedef_name", get_program()->get_typedefs());
+  generate_typespec_list(os, "enum_name", get_program()->get_enums());
+  generate_typespec_list(os, "struct_name", get_program()->get_structs());
+  generate_typespec_list(os, "service_name", get_program()->get_services());
+  generate_typescpec_function_name(os);
+  generate_typescpec_enum_choice(os);
+  os << "-type struct_flavor() :: struct | exception | union." << endl
      << "-type field_num() :: pos_integer()." << endl
      << "-type field_name() :: atom()." << endl
      << "-type field_req() :: required | optional | undefined." << endl
@@ -342,6 +350,97 @@ void t_erlang_generator::generate_typespecs(std::ostream& os) {
 }
 
 template <class Type>
+void t_erlang_generator::generate_typespec_list(
+  std::ostream& os, std::string type_name, vector<Type*> types
+) {
+  indenter i;
+  os << "-type " << type_name << "() ::";
+  iterate_type(os, types, " |", ".", i);
+  if (types.size() == 0) {
+    os << " none()." << i.nldown();
+  }
+  os << endl;
+}
+
+void t_erlang_generator::generate_typespec_type_ref(std::ostream& os) {
+  vector<t_struct*> const& structs = get_program()->get_structs();
+  vector<t_enum*> const& enums = get_program()->get_enums();
+  indenter i;
+  os << "-type type_ref() ::";
+  if (structs.size() > 0 && enums.size() > 0) {
+    os << " {module(),";
+    iterate_type(os, structs, " |", "|", i);
+    iterate_type(os, enums, " |", "", i);
+    os << "}." << i.nl();
+  } else {
+    os << " none()." << i.nl();
+  }
+  os << endl;
+}
+
+void t_erlang_generator::generate_typescpec_function_name(std::ostream& os) {
+  typedef vector<t_service*> vec_s;
+  typedef vector<t_function*> vec_f;
+  indenter i;
+  vec_s const& services = get_program()->get_services();
+  os << "-type function_name() ::" << i.nlup();
+  for(vec_s::const_iterator s = services.begin(); s != services.end();) {
+    vec_f const& functions = (*s)->get_functions();
+    for (vec_f::const_iterator f = functions.begin(); f != functions.end();) {
+      os << function_name(*f);
+      if (++f != functions.end()) {
+        os << "|" << i.nl();
+      }
+    }
+    if (++s != services.end()) {
+      os << "|" << i.nl();
+    } else {
+      os << "." << i.nldown();
+    }
+  }
+  os << endl;
+}
+
+void t_erlang_generator::generate_typescpec_enum_choice(std::ostream& os) {
+  typedef vector<t_enum*> vec_e;
+  typedef vector<t_enum_value*> vec_ev;
+  indenter i;
+  vec_e const& enums = get_program()->get_enums();
+  os << "-type enum_choice() ::" << i.nlup();
+  for(vec_e::const_iterator e = enums.begin(); e != enums.end();) {
+    vec_ev const& constants = (*e)->get_constants();
+    for (vec_ev::const_iterator ev = constants.begin(); ev != constants.end();) {
+      os << underscore((*ev)->get_name());
+      if (++ev != constants.end()) {
+        os << " |" << i.nl();
+      }
+    }
+    if (++e != enums.end()) {
+      os << " |" << i.nl();
+    } else {
+      os << "." << i.nldown();
+    }
+  }
+  os << endl;
+}
+
+template <class Type>
+void t_erlang_generator::iterate_type(
+  std::ostream& os, vector<Type*> type, std::string delim, std::string end, indenter i
+) {
+  if (type.size() > 0) {
+    os << i.nlup();
+    for (size_t j = 0; j < type.size();) {
+      os << type_name(type[j]);
+      if (++j != type.size()) {
+        os << delim << i.nl();
+      }
+    }
+    os << end << i.nldown();
+  }
+}
+
+template <class Type>
 void t_erlang_generator::generate_type_list(
   std::ostream& os, std::string function_name, std::string el_type, vector<Type*> types
 ) {
@@ -349,17 +448,7 @@ void t_erlang_generator::generate_type_list(
   os << "-spec " << function_name << "() -> [" << el_type << "]." << endl << endl
      << function_name << "() ->" << i.nlup()
      << "[";
-
-  if (types.size() > 0) {
-    os << i.nlup();
-    for (size_t j = 0; j < types.size();) {
-      os << type_name(types[j]);
-      if (++j != types.size()) {
-        os << "," << i.nl();
-      }
-    }
-    os << i.nldown();
-  }
+  iterate_type(os, types, ",", "", i);
   os << "]." << endl << endl;
 }
 
@@ -375,7 +464,7 @@ void t_erlang_generator::generate_typedef(t_typedef* ttypedef) {
 void t_erlang_generator::generate_typedef_metadata(std::ostream& erl, std::ostream& hrl) {
   typedef vector<t_typedef*> vec;
 
-  erl << "-spec typedef_info(typedef_name()) -> field_type()." << endl << endl;
+  erl << "-spec typedef_info(typedef_name()) -> field_type() | no_return()." << endl << endl;
   vec const& tdefs = get_program()->get_typedefs();
   for(vec::const_iterator it = tdefs.begin(); it != tdefs.end(); ++it) {
     generate_typedef_info(erl, *it);
@@ -428,7 +517,7 @@ void t_erlang_generator::generate_enum_info(std::ostream& buf, t_enum* tenum) {
 void t_erlang_generator::generate_enum_metadata(std::ostream& os) {
   typedef vector<t_enum*> vec;
 
-  os << "-spec enum_info(enum_name()) -> enum_info()." << endl << endl;
+  os << "-spec enum_info(enum_name()) -> enum_info() | no_return()." << endl << endl;
   vec const& enums = get_program()->get_enums();
   for(vec::const_iterator it = enums.begin(); it != enums.end(); ++it) {
     generate_enum_info(os, *it);
@@ -660,12 +749,14 @@ void t_erlang_generator::generate_struct(t_struct* tstruct) {
 void t_erlang_generator::generate_struct_metadata(std::ostream& erl, std::ostream& hrl) {
   typedef vector<t_struct*> vec;
 
-  erl << "-spec struct_info(struct_name()) -> struct_info()." << endl << endl;
+  erl << "-spec struct_info(struct_name()) -> struct_info() | no_return()." << endl << endl;
   vec const& structs = get_program()->get_structs();
   vec const& xceptions = get_program()->get_xceptions();
   for(vec::const_iterator it = structs.begin(); it != xceptions.end();) {
     generate_struct_info(erl, *it);
-    if (!(*it)->is_union()) {
+    if ((*it)->is_union()) {
+      generate_union_definition(hrl, *it);
+    } else {
       generate_struct_definition(hrl, *it);
     }
     if (++it == structs.end()) {
@@ -674,6 +765,28 @@ void t_erlang_generator::generate_struct_metadata(std::ostream& erl, std::ostrea
   }
 
   erl << "struct_info(_) -> erlang:error(badarg)." << endl << endl;
+}
+
+/**
+ * Generates a union definition for a thrift data type.
+ *
+ * @param tstruct The union definition
+ */
+void t_erlang_generator::generate_union_definition(ostream& out, t_struct* tstruct) {
+  indenter i;
+  out << "%% union " << type_name(tstruct) << endl
+      << "-type " << type_name(tstruct) << "() ::" << i.nlup();
+
+  vector<t_field*> const& members = tstruct->get_members();
+  for (vector<t_field*>::const_iterator it = members.begin(); it != members.end();) {
+    out << "{" << field_name(*it) << ", " << render_member_type(*it) << "}";
+    if (++it != members.end()) {
+      out << " |" << i.nl();
+    } else {
+      out << "." << i.nldown();
+    }
+  }
+  out << endl;
 }
 
 /**
@@ -701,7 +814,6 @@ void t_erlang_generator::generate_struct_definition(ostream& out, t_struct* tstr
 /**
  * Generates the record field definition
  */
-
 void t_erlang_generator::generate_struct_member(ostream& out, std::string name, t_field* tmember) {
   out << field_name(tmember);
   if (has_default_value(tmember))
@@ -758,7 +870,7 @@ void t_erlang_generator::generate_service_metadata(ostream& os) {
   typedef vector<t_service*> vec;
   vec const& services = get_program()->get_services();
 
-  os << "-spec functions(service_name()) -> [function_name()]." << endl << endl;
+  os << "-spec functions(service_name()) -> [function_name()] | no_return()." << endl << endl;
   for(vec::const_iterator it = services.begin(); it != services.end(); ++it) {
     generate_service_metadata(os, *it);
   }
@@ -767,7 +879,7 @@ void t_erlang_generator::generate_service_metadata(ostream& os) {
   indenter i;
   os << "-spec function_info(service_name(), function_name(), params_type | reply_type | exceptions) ->"
      << i.nlup()
-     << "struct_info()." << endl << endl;
+     << "struct_info() | no_return()." << endl << endl;
   for(vec::const_iterator it = services.begin(); it != services.end(); ++it) {
     generate_service_interface(os, *it);
   }
