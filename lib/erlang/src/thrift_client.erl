@@ -34,7 +34,7 @@ new(Protocol, Service = {Module, ServiceName})
                   service = Service,
                   seqid = 0}}.
 
--spec call(#tclient{}, atom(), list()) -> {#tclient{}, {ok, any()} | {error, any()}}.
+-spec call(#tclient{}, atom(), list()) -> {#tclient{}, {ok, any()} | {error, any()}} | no_return().
 call(Client = #tclient{}, Function, Args)
 when is_atom(Function), is_list(Args) ->
   case send_function_call(Client, Function, Args) of
@@ -84,7 +84,7 @@ send_function_call(Client = #tclient{service = Service}, Function, Args) ->
       write_message(Client, Function, Args, Params, MsgType)
   end.
 
--spec write_message(#tclient{}, atom(), list(), {struct, list()}, integer()) ->
+-spec write_message(#tclient{}, atom(), list(), {struct, struct, list()}, integer()) ->
   {ok | {error, any()}, #tclient{}}.
 write_message(Client = #tclient{protocol = P0, seqid = Seq}, Function, Args, Params, MsgType) ->
   try
@@ -116,7 +116,7 @@ write_many(Proto, [Data | Rest]) ->
 write_many(Proto, []) ->
     {Proto, ok}.
 
--spec receive_function_result(#tclient{}, atom()) -> {#tclient{}, {ok, any()} | {error, any()}}.
+-spec receive_function_result(#tclient{}, atom()) -> {#tclient{}, {ok, any()} | {error, any()}} | no_return().
 receive_function_result(Client = #tclient{service = Service}, Function) ->
     ResultType = get_function_info(Service, Function, reply_type),
     read_result(Client, Function, ResultType).
@@ -151,9 +151,9 @@ handle_reply(Client = #tclient{protocol = Proto0,
              ReplyType) ->
     {struct, _, ExceptionFields} = get_function_info(Service, Function, exceptions),
     ReplyStructDef = {struct, struct, [{0, undefined, ReplyType, undefined, undefined}] ++ ExceptionFields},
-    io:format("reply struct: ~p~n", [ReplyStructDef]),
+    %% io:format("reply struct: ~p~n", [ReplyStructDef]),
     {Proto1, {ok, Reply}} = thrift_protocol:read(Proto0, ReplyStructDef),
-    io:format("reply: ~p~n", [Reply]),
+    %% io:format("reply: ~p~n", [Reply]),
     {Proto2, ok} = thrift_protocol:read(Proto1, message_end),
     NewClient = Client#tclient{protocol = Proto2},
     ReplyList = tuple_to_list(Reply),

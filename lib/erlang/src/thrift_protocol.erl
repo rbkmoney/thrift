@@ -93,7 +93,7 @@ term_to_typeid({list, _}) -> ?tType_LIST.
 
 %% Structure is like:
 %%    [{Fid, Type}, ...]
--spec read(#protocol{}, {struct, _Flavor, _StructDef}, atom()) -> {#protocol{}, {ok, tuple()}}.
+-spec read(#protocol{}, {struct, _Flavour, _StructDef}, atom()) -> {#protocol{}, {ok, tuple()}}.
 read(IProto0, {struct, union, StructDef}, _Tag)
   when is_list(StructDef) ->
     {IProto1, RTuple} = read_union_loop(IProto0, enumerate(1, StructDef)),
@@ -125,7 +125,7 @@ enumerate(_, []) ->
 
 %% NOTE: Keep this in sync with thrift_protocol_behaviour:read
 -spec read
-        (#protocol{}, {struct, _Flavor, _Info}) -> {#protocol{}, {ok, tuple()}      | {error, _Reason}};
+        (#protocol{}, {struct, _Flavour, _Info}) -> {#protocol{}, {ok, tuple()}      | {error, _Reason}};
         (#protocol{}, tprot_cont_tag()) ->         {#protocol{}, {ok, any()}        | {error, _Reason}};
         (#protocol{}, tprot_empty_tag()) ->        {#protocol{},  ok                | {error, _Reason}};
         (#protocol{}, tprot_header_tag()) ->       {#protocol{}, tprot_header_val() | {error, _Reason}};
@@ -346,7 +346,7 @@ skip_list_loop(Proto0, Map = #protocol_list_begin{etype = Etype, size = Size}) -
 %%--------------------------------------------------------------------
 %% Function: write(OProto, {Type, Data}) -> ok
 %%
-%% Type = {struct, Flavor, StructDef} |
+%% Type = {struct, Flavour, StructDef} |
 %%        {list, Type} |
 %%        {map, KeyType, ValType} |
 %%        {set, Type} |
@@ -478,7 +478,7 @@ struct_write_loop(Proto, [], []) ->
 -spec validate(tprot_header_val() | tprot_header_tag() | tprot_empty_tag() | field_stop | TypeData) ->
     ok | {error, {invalid, Location :: [atom()], Value :: term()}} when
         TypeData :: {Type, Data},
-        Type :: tprot_data_tag() | tprot_cont_tag() | {enum, _Def} | {struct, _Flavor, _Def},
+        Type :: tprot_data_tag() | tprot_cont_tag() | {enum, _Def} | {struct, _Flavour, _Def},
         Data :: term().
 
 validate(#protocol_message_begin{}) -> ok;
@@ -526,14 +526,14 @@ validate(_Req, {{struct, union, StructDef} = Type, Data = {Name, Value}}, Path)
         false ->
             throw({invalid, Path, Type, Data})
     end;
-validate(Req, {{struct, _Flavor, {Mod, Name}}, Data}, Path)
+validate(Req, {{struct, _Flavour, {Mod, Name}}, Data}, Path)
   when element(1, Data) =:= Name ->
     validate(Req, {Mod:struct_info(Name), Data}, Path);
-validate(_Req, {{struct, _Flavor, StructDef}, Data}, Path)
+validate(_Req, {{struct, _Flavour, StructDef}, Data}, Path)
   when is_list(StructDef) andalso tuple_size(Data) =:= length(StructDef) + 1 ->
     [_ | Elems] = tuple_to_list(Data),
     validate_struct_fields(StructDef, Elems, Path);
-validate(_Req, {{struct, _Flavor, StructDef}, Data}, Path)
+validate(_Req, {{struct, _Flavour, StructDef}, Data}, Path)
   when is_list(StructDef) andalso tuple_size(Data) =:= length(StructDef) ->
     validate_struct_fields(StructDef, tuple_to_list(Data), Path);
 validate(_Req, {{enum, _Fields}, Value}, _Path) when is_atom(Value), Value =/= undefined ->
