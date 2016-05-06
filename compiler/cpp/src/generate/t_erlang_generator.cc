@@ -444,25 +444,31 @@ void t_erlang_generator::generate_typespec_service_function_types(std::ostream& 
 }
 
 void t_erlang_generator::generate_typespec_service_function_type(std::ostream& os, t_service* s) {
-  typedef vector<t_function*> vec_f;
-  os << "-type " << atomify(service_name(s, false) + SERVICE_FUNC_TYPE_SUFFIX) << "() ::";
   indenter i;
+  typedef vector<t_function*> vec_f;
+  os << "-type " << atomify(service_name(s, false) + SERVICE_FUNC_TYPE_SUFFIX) << "() ::" << i.nlup();
+
   vec_f const& functions = s->get_functions();
   if (functions.size() > 0) {
-    os << i.nlup();
     for (vec_f::const_iterator f = functions.begin(); f != functions.end();) {
       os << function_name(*f);
       if (++f != functions.end()) {
         os << " |" << i.nl();
-      } else {
-        os << ".";
       }
     }
-    os << i.nldown();
   } else {
-    os << " none()." << endl;
+    os << "none()";
   }
-  os << endl;
+
+  // Add base class function types as well
+  t_service* base = s->get_extends();
+  if (base) {
+    os << " |" << i.nl();
+    os << type_module(base) << ":" << atomify(service_name(base, false) + SERVICE_FUNC_TYPE_SUFFIX) << "()";
+  }
+  os << "." << i.nldown() << endl;
+
+  os << render_export_type(atomify(service_name(s, false) + SERVICE_FUNC_TYPE_SUFFIX), 0) << endl;
 }
 
 
@@ -993,7 +999,15 @@ void t_erlang_generator::generate_service_metadata(ostream& os, t_service* tserv
     }
     os << i.nldown();
   }
-  os << "];" << endl << endl;
+  os << "]";
+
+  // List inherited functions as well
+  t_service* base = tservice->get_extends();
+  if (base) {
+    os << " ++ " << type_module(base) << ":functions(" << service_name(base) << ")";
+  }
+
+  os << ";" << endl << endl;
 }
 
 /**
