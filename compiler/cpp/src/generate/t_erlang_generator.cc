@@ -126,8 +126,6 @@ private:
   bool scoped_typenames_;
   std::string app_prefix_;
 
-  bool has_default_value(t_field*);
-
   /**
    * write out headers and footers for hrl files
    */
@@ -151,7 +149,6 @@ private:
   std::string render_include(t_program* p);
 
   std::string render_includes();
-  std::string render_default_value(t_field* field);
   std::string render_member_value(std::string name, t_field* field, indenter& ind);
   std::string render_member_type(t_field* field, bool force_full_type);
   std::string render_type(t_type* type, bool force_full_type);
@@ -418,7 +415,6 @@ void t_erlang_generator::generate_typedef_types(std::ostream& os) {
 
 void t_erlang_generator::generate_typespec_function_name(std::ostream& os) {
   typedef vector<t_service*> vec_s;
-  typedef vector<t_function*> vec_f;
   indenter i;
   vec_s const& services = get_program()->get_services();
   os << "-type function_name() ::";
@@ -790,21 +786,6 @@ string t_erlang_generator::render_const_value(t_type* type, std::string name, t_
   return out.str();
 }
 
-string t_erlang_generator::render_default_value(t_field* field) {
-  t_type* type = field->get_type();
-  if (type->is_struct() || type->is_xception()) {
-    return "#" + type_name(type) + "{}";
-  } else if (type->is_map()) {
-    return "#{}";
-  } else if (type->is_set()) {
-    return "ordsets:new()";
-  } else if (type->is_list()) {
-    return "[]";
-  } else {
-    return "undefined";
-  }
-}
-
 string t_erlang_generator::render_member_type(t_field* field, bool force_full_type) {
   return render_type(field->get_type(), force_full_type);
 }
@@ -942,36 +923,17 @@ void t_erlang_generator::generate_struct_definition(ostream& out, t_struct* tstr
  */
 void t_erlang_generator::generate_struct_member(ostream& out, std::string name, t_field* tmember, indenter& ind) {
   out << field_name(tmember);
-  if (has_default_value(tmember)) {
+  if (tmember->get_value()) {
     out << " = " << render_member_value(name + "." + field_name(tmember), tmember, ind);
   }
   out << " :: " << render_member_type(tmember, true);
 }
 
-bool t_erlang_generator::has_default_value(t_field* field) {
-  t_type* type = field->get_type();
-  if (!field->get_value()) {
-    if (field->get_req() == t_field::T_REQUIRED) {
-      if (type->is_struct() || type->is_xception() || type->is_map() || type->is_set()
-          || type->is_list()) {
-        return true;
-      } else {
-        return false;
-      }
-    } else {
-      return false;
-    }
-  } else {
-    return true;
-  }
-}
-
 string t_erlang_generator::render_member_value(std::string name, t_field* field, indenter& ind) {
-  if (!field->get_value()) {
-    return render_default_value(field);
-  } else {
+  if (field->get_value()) {
     return render_const_value(field->get_type(), name, field->get_value(), ind);
   }
+  return "undefined";
 }
 
 /**
@@ -1191,7 +1153,6 @@ string t_erlang_generator::idiomify(const std::string& str) {
   return idiomatic_names_ ? underscore(str) :str;
 }
 
-
 string t_erlang_generator::function_name(t_function* tfun) {
   string const& n = tfun->get_name();
   return atomify(idiomatic_names_ ? underscore(n) : n);
@@ -1300,7 +1261,7 @@ std::string t_erlang_generator::render_type_term(t_type* type,
 
         // Convert to format: {struct, [{Fid, Req, Type, Name, Def}|...]}
         string name = field_name(member);
-        string value = has_default_value(member) ? render_member_value(type_name(type) + "." + name, member, ind) : "undefined";
+        string value = render_member_value(type_name(type) + "." + name, member, ind);
         string requiredness = render_member_requiredness(member);
         buf << "{" << key << ", " << requiredness << ", " << type_term << ", " << name << ", " << value << "}";
 
