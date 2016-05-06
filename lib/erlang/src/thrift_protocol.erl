@@ -56,11 +56,11 @@ flush_transport(Proto = #protocol{module = Module,
     {NewData, Result} = Module:flush_transport(Data),
     {Proto#protocol{data = NewData}, Result}.
 
--spec close_transport(#protocol{}) -> _Result.
-close_transport(#protocol{module = Module,
+-spec close_transport(#protocol{}) -> {#protocol{}, _Result}.
+close_transport(Proto = #protocol{module = Module,
                           data = Data}) ->
-    {_, Result} = Module:close_transport(Data),
-    Result.
+    {Data1, Result} = Module:close_transport(Data),
+    {Proto#protocol{data = Data1}, Result}.
 
 typeid_to_atom(?tType_STOP) -> field_stop;
 typeid_to_atom(?tType_VOID) -> void;

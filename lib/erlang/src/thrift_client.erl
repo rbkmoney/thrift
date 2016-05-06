@@ -57,10 +57,10 @@ send_call(Client = #tclient{}, Function, Args)
       Else -> Else
     end.
 
--spec close(#tclient{}) -> ok.
-close(#tclient{protocol=Protocol}) ->
-    thrift_protocol:close_transport(Protocol).
-
+-spec close(#tclient{}) -> {#tclient{}, _Result}.
+close(Client = #tclient{protocol=Protocol}) ->
+    {Protocol2, Result} = thrift_protocol:close_transport(Protocol),
+    {Client#tclient{protocol=Protocol2}, Result}.
 
 %%--------------------------------------------------------------------
 %%% Internal functions
