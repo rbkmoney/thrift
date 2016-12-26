@@ -22,6 +22,7 @@ import org.apache.thrift.protocol.TProtocol;
 import org.apache.thrift.protocol.TProtocolFactory;
 import org.apache.thrift.transport.TIOStreamTransport;
 import org.apache.thrift.transport.TTransport;
+import org.apache.thrift.transport.TTransportException;
 
 /**
  * Servlet implementation class ThriftServer
@@ -102,7 +103,10 @@ public class TServlet extends HttpServlet {
     TraceData traceData = TraceContext.getCurrentTraceData();
     try {
       if (!interceptor.interceptRequest(traceData, request, response)) {
-        ContextUtils.tryThrowInterceptionError(traceData.getServiceSpan());
+        Throwable reqErr = ContextUtils.getInterceptionError(traceData.getServiceSpan());
+        if (reqErr != null) {
+          throw new TTransportException("Request interception error", reqErr);
+        }
       }
 
       response.setContentType("application/x-thrift");
