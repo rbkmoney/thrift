@@ -401,10 +401,6 @@ public class THttpClient extends TTransport {
       connection.connect();
       connection.getOutputStream().write(data);
 
-      int responseCode = connection.getResponseCode();
-      if (responseCode != HttpURLConnection.HTTP_OK) {
-        throw new TTransportException("HTTP Response code: " + responseCode);
-      }
 
       if (interceptor != null) {
         TraceData traceData = TraceContext.getCurrentTraceData();
@@ -416,6 +412,10 @@ public class THttpClient extends TTransport {
         }
       }
 
+      int responseCode = connection.getResponseCode();
+      if (responseCode != HttpURLConnection.HTTP_OK) {
+        throw new TTransportException("HTTP Response code: " + responseCode);
+      }
       // Read the responses
       inputStream_ = connection.getInputStream();
 
