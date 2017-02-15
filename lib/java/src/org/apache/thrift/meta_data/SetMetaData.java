@@ -25,7 +25,4 @@ public class SetMetaData extends CollectionMetaData {
     super(type, eMetaData);
   }
 
-  public FieldValueMetaData getElementMetaData() {
-    return super.elemMetaData;
-  }
 }
