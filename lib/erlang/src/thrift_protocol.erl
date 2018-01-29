@@ -543,20 +543,20 @@ validate(_Req, {{struct, union, StructDef} = Type, Data = {Name, Value}}, Path)
         false ->
             throw({invalid, Path, Type, Data})
     end;
-validate(Req, {{struct, _Flavour, {Mod, Name} = Type}, Data}, Path)
-  when is_tuple(Data) ->
+validate(Req, {{struct, Flavour, {Mod, Name} = Type}, Data}, Path)
+  when Flavour /= union andalso is_tuple(Data) ->
     case Mod:record_name(Name) of
       RName when RName =:= element(1, Data) ->
         validate(Req, {Mod:struct_info(Name), Data}, Path);
       _ ->
         throw({invalid, Path, Type, Data})
     end;
-validate(_Req, {{struct, _Flavour, StructDef}, Data}, Path)
-  when is_list(StructDef) andalso tuple_size(Data) =:= length(StructDef) + 1 ->
+validate(_Req, {{struct, Flavour, StructDef}, Data}, Path)
+  when Flavour /= union andalso is_list(StructDef) andalso tuple_size(Data) =:= length(StructDef) + 1 ->
     [_ | Elems] = tuple_to_list(Data),
     validate_struct_fields(StructDef, Elems, Path);
-validate(_Req, {{struct, _Flavour, StructDef}, Data}, Path)
-  when is_list(StructDef) andalso tuple_size(Data) =:= length(StructDef) ->
+validate(_Req, {{struct, Flavour, StructDef}, Data}, Path)
+  when Flavour /= union andalso is_list(StructDef) andalso tuple_size(Data) =:= length(StructDef) ->
     validate_struct_fields(StructDef, tuple_to_list(Data), Path);
 validate(_Req, {{enum, _Fields}, Value}, _Path) when is_atom(Value), Value =/= undefined ->
     ok;
