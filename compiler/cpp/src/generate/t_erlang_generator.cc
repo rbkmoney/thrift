@@ -55,7 +55,8 @@ public:
     : t_generator(program)
     , idiomatic_names_(false)
     , scoped_typenames_(false)
-    , app_prefix_("") {
+    , app_prefix_("")
+    , use_maps_(false) {
     (void)option_string;
     std::map<std::string, std::string>::const_iterator iter;
 
@@ -70,6 +71,10 @@ public:
       }
       if(iter->first.compare("app_prefix") == 0) {
         app_prefix_ = (iter->second) + "_";
+        continue;
+      }
+      if (iter->first.compare("use_maps") == 0) {
+        use_maps_ = true;
         continue;
       }
       throw "unknown option:" + iter->first;
@@ -125,6 +130,7 @@ private:
    */
   bool idiomatic_names_;
   bool scoped_typenames_;
+  bool use_maps_;
   std::string app_prefix_;
 
   /**
@@ -180,6 +186,8 @@ private:
   void generate_typedef_info(std::ostream& os, t_typedef*);
   void generate_typedef_types(std::ostream& os);
   void generate_struct_types(std::ostream& os);
+  void generate_struct_type_member(std::ostream& os, t_struct* tstruct);
+  void generate_struct_type(std::ostream& os, t_struct* tstruct);
   void generate_typedef_metadata(std::ostream& erlout);
   void generate_struct_metadata(std::ostream& erlout, std::ostream& hrlout);
   void generate_record_metadata(std::ostream& erlout);
@@ -266,9 +274,11 @@ void t_erlang_generator::init_generator() {
   f_hrl_file_.open(f_hrl_filename.c_str());
 
   f_erl_file_ << erl_autogen_comment() << endl
-              << render_attribute("module", base_name) << endl
-              << render_include(base_name + ".hrl") << endl;
-
+              << render_attribute("module", base_name) << endl;
+  if(!use_maps_)
+  {
+    f_erl_file_ << render_include(base_name + ".hrl") << endl;
+  }
   f_hrl_file_ << render_hrl_header(base_name) << endl
               << render_includes() << endl;
 
@@ -279,9 +289,12 @@ void t_erlang_generator::init_generator() {
               << render_export("services", 0)
               << render_export("typedef_info", 1)
               << render_export("enum_info", 1)
-              << render_export("struct_info", 1)
-              << render_export("record_name", 1)
-              << render_export("functions", 1)
+              << render_export("struct_info", 1);
+  if(!use_maps_)
+  {
+    f_erl_file_ << render_export("record_name", 1);
+  }
+  f_erl_file_ << render_export("functions", 1)
               << render_export("function_info", 3)
               << endl
               << render_export_type("namespace", 0)
@@ -338,7 +351,7 @@ void t_erlang_generator::close_generator() {
   generate_typedef_metadata(f_erl_file_);
   generate_enum_metadata(f_erl_file_);
   generate_struct_metadata(f_erl_file_, f_hrl_file_);
-  generate_record_metadata(f_erl_file_);
+  if(!use_maps_)generate_record_metadata(f_erl_file_);
   generate_service_metadata(f_erl_file_);
 
   f_hrl_file_ << render_hrl_footer();
@@ -587,15 +600,31 @@ void t_erlang_generator::generate_struct_types(std::ostream& os) {
     if ((*it)->is_union()) {
       generate_union_definition(os, *it);
     } else {
-      os << "%% struct " << type_name(*it) << endl;
-      os << "-type " + type_name(*it) << "() :: #" + scoped_type_name(*it) + "{}." << endl << endl;
+        os << "%% struct " << type_name(*it) << endl;
+        if(!use_maps_){
+            os << "-type " + type_name(*it) << "() :: #" + scoped_type_name(*it) + "{}." << endl << endl;
+        }
+        else{
+            os << "-type " + type_name(*it) << "() :: #{";
+            generate_struct_type(os, *it);
+            generate_struct_type_member(os, *it);
+            os << "}." << endl << endl;
+        }
     }
   }
 
   vec const& xceptions = get_program()->get_xceptions();
   for(vec::const_iterator it = xceptions.begin(); it != xceptions.end(); ++it) {
     os << "%% exception " << type_name(*it) << endl;
-    os << "-type " + type_name(*it) << "() :: #" + scoped_type_name(*it) + "{}." << endl << endl;
+    if(!use_maps_){
+        os << "-type " + type_name(*it) << "() :: #" + scoped_type_name(*it) + "{}." << endl << endl;
+    }
+    else{
+        os << "-type " + type_name(*it) << "() :: #{";
+        generate_struct_type(os, *it);
+        generate_struct_type_member(os, *it);
+        os << "}." << endl << endl;
+    }
   }
 }
 
@@ -921,13 +950,13 @@ void t_erlang_generator::generate_struct_metadata(std::ostream& erl, std::ostrea
     erl << "(struct_name() | exception_name()) -> struct_info() | no_return()." << endl << endl;
     for(vec::const_iterator it = structs.begin(); it != structs.end(); ++it) {
       generate_struct_info(erl, *it);
-      if (!(*it)->is_union()) {
+      if (!(*it)->is_union() && !use_maps_) {
         generate_struct_definition(hrl, *it);
       }
     }
     for(vec::const_iterator it = xceptions.begin(); it != xceptions.end(); ++it) {
       generate_struct_info(erl, *it);
-      generate_struct_definition(hrl, *it);
+      if(!use_maps_)generate_struct_definition(hrl, *it);
     }
   } else {
     erl << ERROR_SPEC << endl << endl;
@@ -1014,17 +1043,56 @@ void t_erlang_generator::generate_struct_definition(ostream& out, t_struct* tstr
   out << "})." << endl << endl;
 }
 
+void t_erlang_generator::generate_struct_type(std::ostream& os, t_struct* tstruct)
+{
+    indenter ind;
+    vector<t_field*> const& members = tstruct->get_members();
+
+    os << ind.nlup();
+    os << "'__type' := " << scoped_type_name(tstruct);
+    if (members.size() > 0){
+        os << ",";
+    }
+    else{
+        os << ind.nldown();
+    }
+}
+void t_erlang_generator::generate_struct_type_member(std::ostream& os, t_struct* tstruct)
+{
+    indenter ind;
+    vector<t_field*> const& members = tstruct->get_members();
+    if (members.size() > 0) {
+        os << ind.nlup();
+        for (vector<t_field*>::const_iterator _it = members.begin(); _it != members.end();) {
+          generate_struct_member(os, type_name(tstruct), *_it, ind);
+          if (++_it != members.end()) {
+            os << "," << ind.nl();
+          }
+        }
+        os << ind.nldown();
+    }
+}
 /**
  * Generates the record field definition
  */
 void t_erlang_generator::generate_struct_member(ostream& out, std::string name, t_field* tmember, indenter& ind) {
   out << field_name(tmember);
-  if (tmember->get_value()) {
-    out << " = " << render_member_value(name + "." + field_name(tmember), tmember, ind);
+  if(!use_maps_){
+      if (tmember->get_value()) {
+        out << " = " << render_member_value(name + "." + field_name(tmember), tmember, ind);
+      }
+      out << " :: " << render_member_type(tmember, true);
+      if (tmember->get_req() == t_field::T_OPTIONAL) {
+        out << " | undefined";
+      }
   }
-  out << " :: " << render_member_type(tmember, true);
-  if (tmember->get_req() == t_field::T_OPTIONAL) {
-    out << " | undefined";
+  else{
+      if (tmember->get_req() == t_field::T_OPTIONAL) {
+        out << " := " << render_member_type(tmember, true);
+      }
+      else{
+        out << " => " << render_member_type(tmember, true);
+      }
   }
 }
 
@@ -1459,4 +1527,5 @@ THRIFT_REGISTER_GENERATOR(
   "    idiomatic:        Adapt every name to look idiomatically correct in Erlang (i.e. snake case).\n"
   "    scoped_typenames: Prefix generated Erlang records with the namespace defined for erl.\n"
   "    app_prefix=       Application prefix for generated Erlang files.\n"
+  "    use_maps:         Generate maps from structs instead of records.\n"
 )
