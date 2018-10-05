@@ -95,6 +95,14 @@ public:
       return s;
     }
 
+    std::string nl(size_t _indent) {
+      string s = endl;
+      for (size_t i = 0; i < _indent; ++i) {
+        s += indent_str;
+      }
+      return s;
+    }
+
     std::string up() { ++indent; return string(); }
     std::string down() { indent = indent ? indent - 1 : 0; return string(); }
 
@@ -175,6 +183,9 @@ private:
   void generate_struct_definition(std::ostream& out, t_struct* tstruct);
   void generate_struct_member(std::ostream& out, std::string name, t_field* tmember, indenter& ind);
   void generate_struct_info(std::ostream& out, t_struct* tstruct);
+  void generate_struct_api_new(ostream& out, vector<t_struct*> structs);
+  void generate_struct_api_get(ostream& out, vector<t_struct*> structs);
+  void generate_struct_api_get_type(ostream& out, vector<t_struct*> structs);
   void generate_typespecs(std::ostream& out);
   std::string comment_title(const std::string& title);
   void generate_typespec_function_name(std::ostream& os);
@@ -293,6 +304,12 @@ void t_erlang_generator::init_generator() {
   if(!use_maps_)
   {
     f_erl_file_ << render_export("record_name", 1);
+  }
+  else
+  {
+    f_erl_file_ << render_export("struct_new", 2)
+                << render_export("struct_get", 1)
+                << render_export("struct_get_type", 1);
   }
   f_erl_file_ << render_export("functions", 1)
               << render_export("function_info", 3)
@@ -962,6 +979,30 @@ void t_erlang_generator::generate_struct_metadata(std::ostream& erl, std::ostrea
     erl << ERROR_SPEC << endl << endl;
   }
   erl << "struct_info(_) -> erlang:error(badarg)." << endl << endl;
+
+  if(use_maps_){
+        erl << "-spec struct_new(struct_name() | exception_name(), map()) -> map() | no_return()."
+        << endl << endl;
+    if (structs.size() > 0 || xceptions.size() > 0) {
+        generate_struct_api_new(erl, structs);
+        generate_struct_api_new(erl, xceptions);
+    }
+        erl << "struct_new(_, _) -> error(badarg)." << endl << endl;
+        erl << "-spec struct_get(map()) -> map() | no_return()."
+        << endl << endl;
+    if (structs.size() > 0 || xceptions.size() > 0) {
+        generate_struct_api_get(erl, structs);
+        generate_struct_api_get(erl, xceptions);
+    }
+        erl << "struct_get(_) -> error(badarg)." << endl << endl;
+        erl << "-spec struct_get_type(map()) -> atom() | no_return()."
+        << endl << endl;
+    if (structs.size() > 0 || xceptions.size() > 0) {
+        generate_struct_api_get_type(erl, structs);
+        generate_struct_api_get_type(erl, xceptions);
+    }
+        erl << "struct_get_type(_) -> error(badarg)." << endl << endl;
+  }
 }
 
 void t_erlang_generator::generate_record_metadata(std::ostream& erl) {
@@ -1049,7 +1090,7 @@ void t_erlang_generator::generate_struct_type(std::ostream& os, t_struct* tstruc
     vector<t_field*> const& members = tstruct->get_members();
 
     os << ind.nlup();
-    os << "'__type' := " << scoped_type_name(tstruct);
+    os << "'$struct' := " << scoped_type_name(tstruct);
     if (members.size() > 0){
         os << ",";
     }
@@ -1088,10 +1129,10 @@ void t_erlang_generator::generate_struct_member(ostream& out, std::string name, 
   }
   else{
       if (tmember->get_req() == t_field::T_OPTIONAL) {
-        out << " := " << render_member_type(tmember, true);
+        out << " => " << render_member_type(tmember, true);
       }
       else{
-        out << " => " << render_member_type(tmember, true);
+        out << " := " << render_member_type(tmember, true);
       }
   }
 }
@@ -1111,6 +1152,70 @@ void t_erlang_generator::generate_struct_info(ostream& out, t_struct* tstruct) {
   indenter i;
   out << "struct_info(" << type_name(tstruct) << ") ->" << i.nlup()
       << render_type_term(tstruct, true, i) << ";" << endl << endl;
+}
+
+/**
+ * Generates the new, get and get_type method for a struct
+ */
+
+void t_erlang_generator::generate_struct_api_new(ostream& out, vector<t_struct*> structs) {
+    for(vector<t_struct*>::const_iterator _it = structs.begin(); _it != structs.end(); ++_it)
+    {
+        indenter ind;
+        string f_head = "";
+        string f_body = "";
+        vector<t_field*> const& members = (*_it)->get_members();
+
+        if (members.size() > 0) {
+            f_head += "struct_new(" + type_name(*_it) + ", #{";
+
+            f_body += "#{" + ind.nl(2);
+            f_body += "'$struct' => " + type_name(*_it);
+            int arg_count = 0;
+            for (vector<t_field*>::const_iterator it = members.begin(); it != members.end();) {
+                if ((*it)->get_req() != t_field::T_OPTIONAL) {
+                    if(arg_count++){
+                        f_head += ", ";
+                    }
+                    f_body += "," + ind.nl(2);
+                    string name = field_name(*it);
+                    string arg_name = "Arg_" + name;
+                    arg_name.erase(std::remove(arg_name.begin(), arg_name.end(), '\''), arg_name.end());
+
+                    f_head += name + " := " + arg_name;
+                    f_body += name + " => " + arg_name;
+                }
+                it++;
+            }
+            f_body += ind.nl(1) + "};" + endl + endl;
+            f_head += "}) ->" + ind.nl(1);
+            out << f_head << f_body;
+        }
+        else{
+            out << "struct_new(" << type_name(*_it) << ", _) ->" << ind.nl(1);
+            out << "#{" << ind.nl(2);
+            out << "'$struct' => " << type_name(*_it) << ind.nl(1);
+            out << "};" << endl << endl;
+        }
+    }
+}
+
+void t_erlang_generator::generate_struct_api_get(ostream& out, vector<t_struct*> structs) {
+    for(vector<t_struct*>::const_iterator _it = structs.begin(); _it != structs.end(); ++_it)
+    {
+        indenter ind;
+        out << "struct_get(#{'$struct' := " << type_name(*_it) << "} = Map) ->" << ind.nl(1);
+        out << "maps:remove('$struct', Map);" << endl << endl;
+    }
+}
+
+void t_erlang_generator::generate_struct_api_get_type(ostream& out, vector<t_struct*> structs) {
+    for(vector<t_struct*>::const_iterator _it = structs.begin(); _it != structs.end(); ++_it)
+    {
+        indenter ind;
+        out << "struct_get_type(#{'$struct' := " << type_name(*_it) << "}) ->" << ind.nl(1);
+        out << type_name(*_it) << ";" << endl << endl;
+    }
 }
 
 /**

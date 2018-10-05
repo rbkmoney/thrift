@@ -23,6 +23,7 @@
          write/2,
          read/2,
          read/3,
+         read_map/2,
          skip/2,
          validate/1,
          flush_transport/1,
@@ -93,7 +94,7 @@ term_to_typeid({list, _}) -> ?tType_LIST.
 
 %% Structure is like:
 %%    [{Fid, Type}, ...]
--spec read(#protocol{}, {struct, _Flavour, _StructDef}, atom()) -> {#protocol{}, {ok, tuple()}}.
+-spec read(#protocol{}, {struct, _Flavour, _StructDef}, atom()) -> {#protocol{}, {ok, tuple() | map()}}.
 read(IProto0, {struct, union, StructDef}, _Tag)
   when is_list(StructDef) ->
     {IProto1, RTuple} = read_union_loop(IProto0, enumerate(1, StructDef)),
@@ -106,7 +107,17 @@ read(IProto0, {struct, _, StructDef}, Tag)
   when is_list(StructDef), is_atom(Tag) ->
     {IProto1, ok} = read_frag(IProto0, struct_begin),
     {Offset, RTuple0} = construct_default_struct(Tag, StructDef),
+    %io:format(" def tuple - ~p~n, structDef - ~p~n", [RTuple0, StructDef]),
     {IProto2, RTuple1} = read_struct_loop(IProto1, enumerate(Offset + 1, StructDef), RTuple0),
+    %io:format(" result tuple - ~p~n", [RTuple1]),
+    {IProto2, {ok, RTuple1}}.
+
+-spec read_map(#protocol{}, {struct, _Flavour, _StructDef}) -> {#protocol{}, {ok, map()}}.
+read_map(IProto0, {struct, _, StructDef})
+  when is_list(StructDef) ->
+    {IProto1, ok} = read_frag(IProto0, struct_begin),
+    DefaultMap = fill_default_struct_map(StructDef, #{}),
+    {IProto2, RTuple1} = read_struct_map_loop(IProto1, StructDef, DefaultMap),
     {IProto2, {ok, RTuple1}}.
 
 construct_default_struct(Tag, StructDef) ->
@@ -121,10 +132,18 @@ construct_default_struct(Tag, StructDef) ->
             {1, fill_default_struct(2, StructDef, erlang:setelement(1, Tuple, Tag))}
     end.
 
+
 fill_default_struct(_N, [], Record) ->
     Record;
 fill_default_struct(N, [{_Fid, _Req, _Type, _Name, Default} | Rest], Record) ->
     fill_default_struct(N + 1, Rest, erlang:setelement(N, Record, Default)).
+
+fill_default_struct_map([], Map) ->
+    Map;
+fill_default_struct_map([{_Fid, _Req, _Type, _Name, undefined} | Rest], Map) ->
+    fill_default_struct_map(Rest, Map);
+fill_default_struct_map([{_Fid, _Req, _Type, Name, Default} | Rest], Map) ->
+    fill_default_struct_map(Rest, Map#{Name => Default}).
 
 enumerate(N, [{Fid, _Req, Type, Name, _Default} | Rest]) ->
     [{N, Fid, Type, Name} | enumerate(N + 1, Rest)];
@@ -155,8 +174,15 @@ read_frag(IProto, {struct, union, {Module, StructureName}}) when
     read(IProto, Module:struct_info(StructureName), undefined);
 read_frag(IProto, {struct, _, {Module, StructureName}}) when
   is_atom(Module), is_atom(StructureName) ->
-    read(IProto, Module:struct_info(StructureName), Module:record_name(StructureName));
-
+    io:format(" start parse - ~p~n", [StructureName]),
+    case erlang:function_exported(Module, struct_new, 2) of
+        false ->
+            io:format(" use read ~n"),
+            read(IProto, Module:struct_info(StructureName), StructureName);
+        true ->
+            io:format(" use read_map ~n"),
+            read_map(IProto, Module:struct_info(StructureName))
+    end;
 read_frag(IProto, S={struct, _, Structure}) when is_list(Structure) ->
     read(IProto, S, undefined);
 
@@ -208,6 +234,7 @@ read_frag(Protocol, ProtocolType) ->
 read_specific(Proto = #protocol{module = Module,
                                 data = ModuleData}, ProtocolType) ->
     {NewData, Result} = Module:read(ModuleData, ProtocolType),
+    io:format("read in - ~p, prototype - ~p~n", [Result, ProtocolType]),
     {Proto#protocol{data = NewData}, Result}.
 
 -spec read_list_loop(#protocol{}, any(), non_neg_integer()) -> {#protocol{}, [any()]}.
@@ -284,6 +311,36 @@ read_struct_loop(IProto0, StructIndex, Fun, Acc) ->
             end
     end.
 
+read_struct_map_loop(IProto0, [{_Fid, _Req, Type, Name, _Default} | Rest], Acc) ->
+    {IProto1, #protocol_field_begin{type = FType, id = Fid}} = read_frag(IProto0, field_begin),
+    case {FType, Fid} of
+        {?tType_STOP, _} ->
+            io:format(" stop read map field Type - ~p~n", [Type]),
+            {IProto2, ok} = read_frag(IProto1, struct_end),
+            {IProto2, Acc};
+        _Else ->
+            case term_to_typeid(Type) of
+                FType ->
+                    io:format(" read map field Type - ~p~n", [Type]),
+                    {IProto2, {ok, Val}} = read_frag(IProto1, Type),
+                    {IProto3, ok} = read_frag(IProto2, field_end),
+                    read_struct_map_loop(IProto3, Rest, Acc#{Name => Val});
+                _Expected ->
+                    io:format(" need to skip_field ~p~n", [_Expected]),
+                    error_logger:info_msg(
+                        "Skipping field ~p with wrong type: ~p~n",
+                        [Name, typeid_to_atom(FType)]),
+                    skip_field(FType, IProto1, Rest, Acc)
+            end
+    end;
+read_struct_map_loop(IProto, [], Acc) ->
+    {IProto, Acc}.
+
+skip_field(FType, IProto0, StructDef, Acc) when is_map(Acc) ->
+    FTypeAtom = typeid_to_atom(FType),
+    {IProto1, ok} = skip(IProto0, FTypeAtom),
+    {IProto2, ok} = read_frag(IProto1, field_end),
+    read_struct_map_loop(IProto2, StructDef, Acc);
 skip_field(FType, IProto0, StructIndex, Acc) ->
     FTypeAtom = typeid_to_atom(FType),
     {IProto1, ok} = skip(IProto0, FTypeAtom),
@@ -376,7 +433,10 @@ skip_list_loop(Proto0, Map = #protocol_list_begin{etype = Etype, size = Size}) -
 
 write(Proto, TypeData) ->
     case validate(TypeData) of
-        ok -> write_frag(Proto, TypeData);
+        ok ->
+            {Protocol1, ok} = write_frag(Proto, TypeData),
+            io:format("write proto - ~p~n", [Protocol1]),
+            {Protocol1, ok};
         Error -> {Proto, Error}
     end.
 
@@ -392,6 +452,13 @@ write_frag(Proto0, {{struct, _, StructDef}, Data}, StructName)
     [_ | Elems] = tuple_to_list(Data),
     {Proto1, ok} = write_frag(Proto0, #protocol_struct_begin{name = StructName}),
     {Proto2, ok} = struct_write_loop(Proto1, StructDef, Elems),
+    {Proto3, ok} = write_frag(Proto2, struct_end),
+    {Proto3, ok};
+
+write_frag(Proto0, {{struct, _, StructDef}, Data}, StructName)
+  when is_list(StructDef), is_map(Data) ->
+    {Proto1, ok} = write_frag(Proto0, #protocol_struct_begin{name = StructName}),
+    {Proto2, ok} = struct_map_write_loop(Proto1, StructDef, maps:to_list(Data)),
     {Proto3, ok} = write_frag(Proto2, struct_end),
     {Proto3, ok}.
 
@@ -470,6 +537,8 @@ write_frag(Proto0, {{set, Type}, Data}) ->
 write_frag(Proto = #protocol{module = Module,
                         data = ModuleData}, Data) ->
     {NewData, Result} = Module:write(ModuleData, Data),
+    %io:format("write out - ~p~n, proto - ~p~n", [Data, NewData]),
+    io:format("write out - ~p~n", [Data]),
     {Proto#protocol{data = NewData}, Result}.
 
 struct_write_loop(Proto0, [{Fid, _Req, Type, _Name, _Default} | RestStructDef], [Data | RestData]) ->
@@ -488,6 +557,23 @@ struct_write_loop(Proto0, [{Fid, _Req, Type, _Name, _Default} | RestStructDef], 
                end,
     struct_write_loop(NewProto, RestStructDef, RestData);
 struct_write_loop(Proto, [], []) ->
+    write_frag(Proto, field_stop).
+
+struct_map_write(Proto0, {Fid, _Req, Type, _Name, _Default}, {_Key, Data}) ->
+    {Proto1, ok} = write_frag(Proto0,
+                       #protocol_field_begin{
+                         type = term_to_typeid(Type),
+                         id = Fid
+                        }),
+    %io:format("write field - ~p Data - ~p~n", [Type, Data]),
+    {Proto2, ok} = write_frag(Proto1, {Type, Data}),
+    write_frag(Proto2, field_end).
+
+struct_map_write_loop(Proto0, [StructDef | RestStructDef], [Data | RestData]) ->
+    {Proto1, ok} = struct_map_write(Proto0, StructDef, Data),
+    struct_map_write_loop(Proto1, RestStructDef, RestData);
+struct_map_write_loop(Proto, _, []) ->
+    %io:format("End of cycle reached..~n"),
     write_frag(Proto, field_stop).
 
 -spec validate(tprot_header_val() | tprot_header_tag() | tprot_empty_tag() | field_stop | TypeData) ->
@@ -513,7 +599,9 @@ validate(map_end) -> ok;
 validate(TypeData) ->
     try validate(TypeData, []) catch
         throw:{invalid, Path, _Type, Value} ->
-            {error, {invalid, lists:reverse(Path), Value}}
+            {error, {invalid, lists:reverse(Path), Value}};
+        throw:{invalid_clause, Path, _Type, Value} ->
+            {error, {invalid_clause, lists:reverse(Path), Value}}
     end.
 
 validate(TypeData, Path) ->
@@ -521,6 +609,7 @@ validate(TypeData, Path) ->
 
 validate(Req, {_Type, undefined}, _Path)
   when Req =:= optional orelse Req =:= undefined ->
+    %io:format("validate undef path - ~p~n", [_Path]),
     ok;
 validate(_Req, {{list, Type}, Data}, Path)
   when is_list(Data) ->
@@ -541,14 +630,9 @@ validate(_Req, {{struct, union, StructDef} = Type, Data = {Name, Value}}, Path)
         false ->
             throw({invalid, Path, Type, Data})
     end;
-validate(Req, {{struct, _Flavour, {Mod, Name} = Type}, Data}, Path)
-  when is_tuple(Data) ->
-    case Mod:record_name(Name) of
-      RName when RName =:= element(1, Data) ->
-        validate(Req, {Mod:struct_info(Name), Data}, Path);
-      _ ->
-        throw({invalid, Path, Type, Data})
-    end;
+validate(Req, {{struct, _Flavour, {Mod, Name}}, Data}, Path)
+  when is_tuple(Data) orelse is_map(Data) ->
+    validate(Req, {Mod:struct_info(Name), Data}, Path);
 validate(_Req, {{struct, _Flavour, StructDef}, Data}, Path)
   when is_list(StructDef) andalso tuple_size(Data) =:= length(StructDef) + 1 ->
     [_ | Elems] = tuple_to_list(Data),
@@ -556,6 +640,10 @@ validate(_Req, {{struct, _Flavour, StructDef}, Data}, Path)
 validate(_Req, {{struct, _Flavour, StructDef}, Data}, Path)
   when is_list(StructDef) andalso tuple_size(Data) =:= length(StructDef) ->
     validate_struct_fields(StructDef, tuple_to_list(Data), Path);
+validate(_Req, {{struct, _Flavour, StructDef}, Data}, Path)
+  when is_list(StructDef) andalso is_map(Data) ->
+    %io:format("Try valid map - ~p~n", [Data]),
+    validate_struct_map_fields(StructDef, maps:to_list(Data), Path);
 validate(_Req, {{enum, _Fields}, Value}, _Path) when is_atom(Value), Value =/= undefined ->
     ok;
 validate(_Req, {string, Value}, _Path) when is_binary(Value) ->
@@ -580,7 +668,7 @@ validate(_Req, {i64, Value}, _Path)
 validate(_Req, {double, Value}, _Path) when is_float(Value) ->
     ok;
 validate(_Req, {Type, Value}, Path) ->
-    throw({invalid, Path, Type, Value}).
+    throw({invalid_clause, Path, Type, Value}).
 
 validate_struct_fields(Types, Elems, Path) ->
     lists:foreach(
@@ -588,4 +676,24 @@ validate_struct_fields(Types, Elems, Path) ->
             validate(Req, {Type, Data}, [Name | Path])
         end,
         lists:zip(Types, Elems)
+    ).
+
+validate_struct_map_fields(Types, [], Path)
+    when length(Types) =:= 1 ->
+        {_, Req, Type, Name, _} = lists:last(Types),
+        %io:format("validate_struct_fields Types - ~p~n", [Types]),
+        validate(Req, {Type, undefined}, [Name | Path]);
+validate_struct_map_fields(Types, Elems, Path) ->
+    ListData = lists:foldl(
+        fun ({_Key, Val}, List) ->
+            [Val | List]
+        end,
+        [], Elems),
+    %io:format("validate_struct_fields Types - ~p -- Data - ~p~n", [Types, ListData]),
+    lists:foreach(
+        fun ({{_, Req, Type, Name, _}, Data}) ->
+            %io:format("Req - ~p, Type - ~p, Name - ~p~n", [Req, Type, Name]),
+            validate(Req, {Type, Data}, [Name | Path])
+        end,
+        lists:zip(Types, ListData)
     ).
