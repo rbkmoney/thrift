@@ -1173,7 +1173,7 @@ void t_erlang_generator::generate_struct_api_new(ostream& out, vector<t_struct*>
             f_body += "'$struct' => " + type_name(*_it);
             int arg_count = 0;
             for (vector<t_field*>::const_iterator it = members.begin(); it != members.end();) {
-                if ((*it)->get_req() != t_field::T_OPTIONAL) {
+                if ((*it)->get_req() == t_field::T_REQUIRED) {
                     if(arg_count++){
                         f_head += ", ";
                     }

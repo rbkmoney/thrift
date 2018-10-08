@@ -28,7 +28,8 @@
 encode_decode_recursive_test() ->
   {ok, Transport} = thrift_memory_buffer:new(),
   {ok, Protocol0} = thrift_binary_protocol:new(Transport),
-  TestData = #{other => #{other => #{}}},
+  TestData = #{'$struct' => 'CoRec', other => #{'$struct' => 'CoRec2',
+    other => #{'$struct' => 'CoRec'}}},
   {Protocol1, ok} = thrift_protocol:write(Protocol0,
     {{struct, struct, {recursive_thrift, 'CoRec'}},
       TestData}),
@@ -40,7 +41,9 @@ encode_decode_recursive_test() ->
 encode_decode_recursive_2_test() ->
   {ok, Transport} = thrift_memory_buffer:new(),
   {ok, Protocol0} = thrift_binary_protocol:new(Transport),
-  TestData = #{item => 42, children => [#{}, #{item => 31337, children => [#{}]}]},
+  TestData = #{'$struct' => 'RecTree', item => 42,
+    children => [#{'$struct' => 'RecTree'}, #{'$struct' => 'RecTree', item => 31337,
+        children => [#{'$struct' => 'RecTree'}]}]},
   {Protocol1, ok} = thrift_protocol:write(Protocol0,
     {{struct, struct, {recursive_thrift, 'RecTree'}},
       TestData}),
