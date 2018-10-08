@@ -631,9 +631,7 @@ validate(map_end) -> ok;
 validate(TypeData) ->
     try validate(TypeData, []) catch
         throw:{invalid, Path, _Type, Value} ->
-            {error, {invalid, lists:reverse(Path), Value}};
-        throw:{invalid_clause, Path, _Type, Value} ->
-            {error, {invalid_clause, lists:reverse(Path), Value}}
+            {error, {invalid, lists:reverse(Path), Value}}
     end.
 
 validate(TypeData, Path) ->
@@ -670,17 +668,23 @@ validate(Req, {{struct, _Flavour, {Mod, Name}}, Data}, Path)
 validate(Req, {{struct, _Flavour, {Mod, Name}}, Data}, Path)
   when is_map(Data) ->
     %io:format("Try valid with mod name - ~p~n", [Data]),
-    validate(Req, {Mod:struct_info(Name), Mod:struct_get(Data)}, Path);
+    case Mod:struct_get_type(Data) =:= Name of
+        true ->
+            validate(Req, {Mod:struct_info(Name), Mod:struct_get(Data)}, Path);
+        false ->
+           throw({invalid, Path, Name, Data})
+    end;
 validate(_Req, {{struct, _Flavour, StructDef}, Data}, Path)
   when is_list(StructDef) andalso tuple_size(Data) =:= length(StructDef) + 1 ->
     [_ | Elems] = tuple_to_list(Data),
     validate_struct_fields(StructDef, Elems, Path);
 validate(_Req, {{struct, _Flavour, StructDef}, Data}, Path)
   when is_list(StructDef) andalso tuple_size(Data) =:= length(StructDef) ->
+    io:format("Try valid struct - ~p with StructDef -~p~n", [Data, StructDef]),
     validate_struct_fields(StructDef, tuple_to_list(Data), Path);
 validate(_Req, {{struct, _Flavour, StructDef}, Data}, Path)
   when is_list(StructDef) andalso is_map(Data) ->
-    io:format("Try valid map - ~p~n", [Data]),
+    io:format("Try valid map - ~p with StructDef -~p~n", [Data, StructDef]),
     validate_struct_map_fields(StructDef, maps:to_list(Data), Path);
 validate(_Req, {{enum, _Fields}, Value}, _Path) when is_atom(Value), Value =/= undefined ->
     ok;
@@ -706,7 +710,7 @@ validate(_Req, {i64, Value}, _Path)
 validate(_Req, {double, Value}, _Path) when is_float(Value) ->
     ok;
 validate(_Req, {Type, Value}, Path) ->
-    throw({invalid_clause, Path, Type, Value}).
+    throw({invalid, Path, Type, Value}).
 
 validate_struct_fields(Types, Elems, Path) ->
     lists:foreach(
@@ -725,21 +729,10 @@ validate_struct_map_fields(Types, Elems, Path) ->
     ListTypeData = map_sort_data(Types, Elems, Path),
     io:format("validate_struct_fields TypesData - ~p~n", [ListTypeData]),
     %io:format("validate_struct_fields Types - ~p -- Data - ~p~n", [Types, ListData]),
-    FieldValidateFun = fun ({{_, Req, Type, Name, _}, Data}) ->
-        case Type of
-            {struct, _, {DataMod, DataType}} ->
-                case DataMod:struct_get_type(Data) =:= DataType of
-                    true ->
-                        validate(Req, {Type, Data}, [Name | Path]);
-                    false ->
-                       throw({invalid, [Name | Path], DataType, Data})
-                end;
-            _ ->
-                validate(Req, {Type, Data}, [Name | Path])
-        end
-    end,
     lists:foreach(
-        FieldValidateFun,
+        fun ({{_, Req, Type, Name, _}, Data}) ->
+            validate(Req, {Type, Data}, [Name | Path])
+        end,
         ListTypeData
     ).
 

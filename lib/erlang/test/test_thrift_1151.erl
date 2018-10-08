@@ -17,6 +17,40 @@ unmatched_struct_test() ->
     )
   ).
 
+badarg_test() ->
+  S2 = #{'$struct' => 'StructC', x => #{'$struct' => 'StructA', x => "1"}},
+  {ok, Transport} = thrift_memory_buffer:new(),
+  {ok, Protocol} = thrift_binary_protocol:new(Transport),
+  ?assertEqual(
+    {Protocol, {error, {invalid, [x, x], "1"}}},
+    thrift_protocol:write(
+      Protocol,
+      {{struct, struct, {thrift1151_thrift, 'StructC'}}, S2}
+    )
+  ).
 
+union_test() ->
+  S1 = {a, #{'$struct' => 'StructA', x => 1}},
+  {ok, Transport} = thrift_memory_buffer:new(),
+  {ok, Protocol} = thrift_binary_protocol:new(Transport),
+  ?assertMatch(
+    {_Protocol, ok},
+    thrift_protocol:write(
+      Protocol,
+      {{struct, union, {thrift1151_thrift, 'UnionA'}}, S1}
+    )
+  ).
+
+union_badarg_test() ->
+  S1 = {a, S2 = #{'$struct' => 'StructB', x => 42}},
+  {ok, Transport} = thrift_memory_buffer:new(),
+  {ok, Protocol} = thrift_binary_protocol:new(Transport),
+  ?assertEqual(
+    {Protocol, {error, {invalid, [a], S2}}},
+    thrift_protocol:write(
+      Protocol,
+      {{struct, union, {thrift1151_thrift, 'UnionA'}}, S1}
+    )
+  ).
 
 -endif.

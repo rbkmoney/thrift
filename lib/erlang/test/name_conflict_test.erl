@@ -24,6 +24,84 @@
 
 -include("gen-erlang/name_conflict_test_thrift.hrl").
 
+record_generation_test_() ->
+  [
+    {"using record", ?_assertMatch(
+      #{'$struct' := using, single := null, integer := null},
+      name_conflict_test_thrift:struct_new(using, #{single => null, integer => null})
+    )},
+    {"delegate record", ?_assertMatch(
+      #{'$struct' := delegate, partial := null, delegate := null},
+      name_conflict_test_thrift:struct_new(delegate, #{partial => null, delegate => null})
+    )},
+    {"get record", ?_assertMatch(
+      #{'$struct' := get, sbyte := null},
+      name_conflict_test_thrift:struct_new(get, #{sbyte => null})
+    )},
+    {"partial record", ?_assertMatch(
+      #{'$struct' := partial, using := null},
+      name_conflict_test_thrift:struct_new(partial, #{using => null})
+    )},
+    {"ClassAndProp record", ?_assertMatch(
+      #{'$struct' := 'ClassAndProp', 'ClassAndProp' := null,
+            'ClassAndProp_' := null, 'ClassAndProp__' := null,
+            'ClassAndProper' := null},
+      name_conflict_test_thrift:struct_new('ClassAndProp', #{'ClassAndProp' => null,
+        'ClassAndProp_' => null,
+        'ClassAndProp__' => null,
+        'ClassAndProper' => null})
+    )},
+    {"second_chance record", ?_assertMatch(
+      #{'$struct' := second_chance, 'SECOND_CHANCE' := null,
+            'SECOND_CHANCE_' := null, 'SECOND_CHANCE__' := null,
+            'SECOND_CHANCES' := null},
+      name_conflict_test_thrift:struct_new(second_chance, #{'SECOND_CHANCE' => null,
+        'SECOND_CHANCE_' => null,
+        'SECOND_CHANCE__' => null,
+        'SECOND_CHANCES' => null})
+    )},
+    {"NOW_EAT_THIS record", ?_assertMatch(
+      #{'$struct' := 'NOW_EAT_THIS', now_eat_this := null,
+            now_eat_this_ := null, now_eat_this__ := null,
+            now_eat_this_and_this := null},
+      name_conflict_test_thrift:struct_new('NOW_EAT_THIS', #{now_eat_this => null,
+        now_eat_this_ => null,
+        now_eat_this__ => null,
+        now_eat_this_and_this => null})
+    )},
+    {"TheEdgeCase record", ?_assertMatch(
+      #{'$struct' := 'TheEdgeCase', theEdgeCase := null,
+            theEdgeCase_ := null, theEdgeCase__ := null,
+            'TheEdgeCase' := null, 'TheEdgeCase_' := null, 'TheEdgeCase__' := null},
+      name_conflict_test_thrift:struct_new('TheEdgeCase', #{theEdgeCase => null,
+        theEdgeCase_ => null,
+        theEdgeCase__ => null,
+        'TheEdgeCase' => null,
+        'TheEdgeCase_' => null,
+        'TheEdgeCase__' => null})
+    )},
+    {"Tricky_ record", ?_assertMatch(
+      #{'$struct' := 'Tricky_', tricky := null, 'Tricky' := null},
+      name_conflict_test_thrift:struct_new('Tricky_', #{tricky => null, 'Tricky' => null})
+    )},
+    {"Nested record", ?_assertMatch(
+      #{'$struct' := 'Nested', 'ClassAndProp' := null,
+            second_chance := null, 'NOW_EAT_THIS' := null,
+            'TheEdgeCase' := null, 'Tricky_' := null, 'Nested' := null},
+      name_conflict_test_thrift:struct_new('Nested', #{'ClassAndProp' => null,
+        second_chance => null,
+        'NOW_EAT_THIS' => null,
+        'TheEdgeCase' => null,
+        'Tricky_' => null,
+        'Nested' => null})
+    )},
+    {"Problem_ record", ?_assertMatch(
+      #{'$struct' := 'Problem_', problem := null, 'Problem' := null},
+      name_conflict_test_thrift:struct_new('Problem_', #{problem => null, 'Problem' => null})
+    )}
+  ].
+
+
 struct_info_test_() ->
   [
     {"using extended definition", ?_assertEqual(
