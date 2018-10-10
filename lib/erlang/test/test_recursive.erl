@@ -35,8 +35,7 @@ encode_decode_recursive_test() ->
       TestData}),
   {_Protocol2, {ok, Result}} = thrift_protocol:read(Protocol1,
     {struct, struct, {recursive_thrift, 'CoRec'}}),
-  TestData = Result,
-  Result = TestData.
+  ?_assertMatch(TestData, Result).
 
 encode_decode_recursive_2_test() ->
   {ok, Transport} = thrift_memory_buffer:new(),
@@ -49,7 +48,6 @@ encode_decode_recursive_2_test() ->
       TestData}),
   {_Protocol2, {ok, Result}} = thrift_protocol:read(Protocol1,
     {struct, struct, {recursive_thrift, 'RecTree'}}),
-  TestData = Result,
-  Result = TestData.
+  ?_assertMatch(TestData, Result).
 
 -endif.

@@ -77,7 +77,7 @@ record_generation_test_() ->
     )},
     {"EmptyStruct record", ?_assertMatch(
         #{'$struct' := 'EmptyStruct'},
-        thrift_test_thrift:struct_new('Xception2', #{})
+        thrift_test_thrift:struct_new('EmptyStruct', #{})
     )},
     {"OneField record", ?_assertMatch(
         #{'$struct' := 'OneField'},

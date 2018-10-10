@@ -198,7 +198,6 @@ private:
   void generate_typedef_types(std::ostream& os);
   void generate_struct_types(std::ostream& os);
   void generate_struct_type_member(std::ostream& os, t_struct* tstruct);
-  void generate_struct_type(std::ostream& os, t_struct* tstruct);
   void generate_typedef_metadata(std::ostream& erlout);
   void generate_struct_metadata(std::ostream& erlout, std::ostream& hrlout);
   void generate_record_metadata(std::ostream& erlout);
@@ -298,6 +297,7 @@ void t_erlang_generator::init_generator() {
               << render_export("typedefs", 0)
               << render_export("structs", 0)
               << render_export("services", 0)
+              << render_export("flags", 0)
               << render_export("typedef_info", 1)
               << render_export("enum_info", 1)
               << render_export("struct_info", 1);
@@ -368,7 +368,9 @@ void t_erlang_generator::close_generator() {
   generate_typedef_metadata(f_erl_file_);
   generate_enum_metadata(f_erl_file_);
   generate_struct_metadata(f_erl_file_, f_hrl_file_);
-  if(!use_maps_)generate_record_metadata(f_erl_file_);
+  if(!use_maps_){
+    generate_record_metadata(f_erl_file_);
+  }
   generate_service_metadata(f_erl_file_);
 
   f_hrl_file_ << render_hrl_footer();
@@ -623,7 +625,6 @@ void t_erlang_generator::generate_struct_types(std::ostream& os) {
         }
         else{
             os << "-type " + type_name(*it) << "() :: #{";
-            generate_struct_type(os, *it);
             generate_struct_type_member(os, *it);
             os << "}." << endl << endl;
         }
@@ -638,7 +639,6 @@ void t_erlang_generator::generate_struct_types(std::ostream& os) {
     }
     else{
         os << "-type " + type_name(*it) << "() :: #{";
-        generate_struct_type(os, *it);
         generate_struct_type_member(os, *it);
         os << "}." << endl << endl;
     }
@@ -973,7 +973,9 @@ void t_erlang_generator::generate_struct_metadata(std::ostream& erl, std::ostrea
     }
     for(vec::const_iterator it = xceptions.begin(); it != xceptions.end(); ++it) {
       generate_struct_info(erl, *it);
-      if(!use_maps_)generate_struct_definition(hrl, *it);
+      if(!use_maps_){
+            generate_struct_definition(hrl, *it);
+        }
     }
   } else {
     erl << ERROR_SPEC << endl << endl;
@@ -981,27 +983,34 @@ void t_erlang_generator::generate_struct_metadata(std::ostream& erl, std::ostrea
   erl << "struct_info(_) -> erlang:error(badarg)." << endl << endl;
 
   if(use_maps_){
-        erl << "-spec struct_new(struct_name() | exception_name(), map()) -> map() | no_return()."
+    erl << "-spec struct_new(struct_name() | exception_name(), map()) -> map() | no_return()."
         << endl << endl;
     if (structs.size() > 0 || xceptions.size() > 0) {
         generate_struct_api_new(erl, structs);
         generate_struct_api_new(erl, xceptions);
     }
-        erl << "struct_new(_, _) -> error(badarg)." << endl << endl;
-        erl << "-spec struct_get(map()) -> map() | no_return()."
+    erl << "struct_new(_, _) -> error(badarg)." << endl << endl;
+    erl << "-spec struct_get(map()) -> map() | no_return()."
         << endl << endl;
     if (structs.size() > 0 || xceptions.size() > 0) {
         generate_struct_api_get(erl, structs);
         generate_struct_api_get(erl, xceptions);
     }
-        erl << "struct_get(_) -> error(badarg)." << endl << endl;
-        erl << "-spec struct_get_type(map()) -> atom() | no_return()."
+    erl << "struct_get(_) -> error(badarg)." << endl << endl;
+    erl << "-spec struct_get_type(map()) -> atom() | no_return()."
         << endl << endl;
     if (structs.size() > 0 || xceptions.size() > 0) {
         generate_struct_api_get_type(erl, structs);
         generate_struct_api_get_type(erl, xceptions);
     }
-        erl << "struct_get_type(_) -> error(badarg)." << endl << endl;
+    erl << "struct_get_type(_) -> error(badarg)." << endl << endl;
+    erl << "-spec flags() -> atom()." << endl << endl;
+    erl << "flags() -> true." << endl << endl;
+  }
+  else
+  {
+    erl << "-spec flags() -> atom()." << endl << endl;
+    erl << "flags() -> false." << endl << endl;
   }
 }
 
@@ -1084,25 +1093,14 @@ void t_erlang_generator::generate_struct_definition(ostream& out, t_struct* tstr
   out << "})." << endl << endl;
 }
 
-void t_erlang_generator::generate_struct_type(std::ostream& os, t_struct* tstruct)
-{
-    indenter ind;
-    vector<t_field*> const& members = tstruct->get_members();
-
-    os << ind.nlup();
-    os << "'$struct' := " << scoped_type_name(tstruct);
-    if (members.size() > 0){
-        os << ",";
-    }
-    else{
-        os << ind.nldown();
-    }
-}
 void t_erlang_generator::generate_struct_type_member(std::ostream& os, t_struct* tstruct)
 {
     indenter ind;
     vector<t_field*> const& members = tstruct->get_members();
+    os << ind.nlup();
+    os << "'$struct' := " << scoped_type_name(tstruct);
     if (members.size() > 0) {
+        os << ",";
         os << ind.nlup();
         for (vector<t_field*>::const_iterator _it = members.begin(); _it != members.end();) {
           generate_struct_member(os, type_name(tstruct), *_it, ind);
@@ -1110,6 +1108,9 @@ void t_erlang_generator::generate_struct_type_member(std::ostream& os, t_struct*
             os << "," << ind.nl();
           }
         }
+        os << ind.nldown();
+    }
+    else{
         os << ind.nldown();
     }
 }
@@ -1167,9 +1168,9 @@ void t_erlang_generator::generate_struct_api_new(ostream& out, vector<t_struct*>
         vector<t_field*> const& members = (*_it)->get_members();
 
         if (members.size() > 0) {
-            f_head += "struct_new(" + type_name(*_it) + ", #{";
+            f_head += "struct_new(" + type_name(*_it) + ", Map = #{";
 
-            f_body += "#{" + ind.nl(2);
+            f_body += "Map#{" + ind.nl(2);
             f_body += "'$struct' => " + type_name(*_it);
             int arg_count = 0;
             for (vector<t_field*>::const_iterator it = members.begin(); it != members.end();) {
@@ -1177,13 +1178,11 @@ void t_erlang_generator::generate_struct_api_new(ostream& out, vector<t_struct*>
                     if(arg_count++){
                         f_head += ", ";
                     }
-                    f_body += "," + ind.nl(2);
                     string name = field_name(*it);
-                    string arg_name = "Arg_" + name;
+                    string arg_name = "_Arg_" + name;
                     arg_name.erase(std::remove(arg_name.begin(), arg_name.end(), '\''), arg_name.end());
 
                     f_head += name + " := " + arg_name;
-                    f_body += name + " => " + arg_name;
                 }
                 it++;
             }

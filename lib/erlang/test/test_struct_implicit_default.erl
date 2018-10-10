@@ -32,8 +32,8 @@ encode_decode_default_test() ->
   InitialData = #{'$struct' => 'HereIAm', name => <<"Test">>},
   {Protocol1, ok} = thrift_protocol:write(Protocol0, {?THRIFT_TYPE, InitialData}),
   {_Protocol2, {ok, RoundtripData}} = thrift_protocol:read(Protocol1, ?THRIFT_TYPE),
-  %RoundtripData = InitialData,
-  InitialData = RoundtripData.
+  ?_assertMatch(InitialData, RoundtripData).
+
 
 implicit_default_test() ->
   {ok, Transport} = thrift_memory_buffer:new(),
@@ -42,7 +42,6 @@ implicit_default_test() ->
   {Protocol1, ok} = thrift_protocol:write(Protocol0, {?THRIFT_TYPE, InitialData}),
   {_Protocol2, {ok, RoundtripData}} = thrift_protocol:read(Protocol1, ?THRIFT_TYPE),
   Map = #{name => <<"Jóhansson">>, age => 42, '$struct' => 'HereIAm'},
-  %RoundtripData = Map,
-  Map = RoundtripData.
+  ?_assertMatch(InitialData, RoundtripData).
 
 -endif.
