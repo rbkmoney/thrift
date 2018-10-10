@@ -184,6 +184,7 @@ private:
   void generate_struct_member(std::ostream& out, std::string name, t_field* tmember, indenter& ind);
   void generate_struct_info(std::ostream& out, t_struct* tstruct);
   void generate_struct_api_new(ostream& out, vector<t_struct*> structs);
+  void generate_struct_api_new_spec(ostream& out, vector<t_struct*> structs, vector<t_struct*> xceptions);
   void generate_struct_api_get(ostream& out, vector<t_struct*> structs);
   void generate_struct_api_get_type(ostream& out, vector<t_struct*> structs);
   void generate_typespecs(std::ostream& out);
@@ -983,25 +984,35 @@ void t_erlang_generator::generate_struct_metadata(std::ostream& erl, std::ostrea
   erl << "struct_info(_) -> erlang:error(badarg)." << endl << endl;
 
   if(use_maps_){
-    erl << "-spec struct_new(struct_name() | exception_name(), map()) -> map() | no_return()."
-        << endl << endl;
     if (structs.size() > 0 || xceptions.size() > 0) {
+        generate_struct_api_new_spec(erl, structs, xceptions);
         generate_struct_api_new(erl, structs);
         generate_struct_api_new(erl, xceptions);
     }
+    else{
+        erl << "-spec struct_new(_, _) -> no_return()." << endl << endl;
+    }
     erl << "struct_new(_, _) -> error(badarg)." << endl << endl;
-    erl << "-spec struct_get(map()) -> map() | no_return()."
-        << endl << endl;
+
     if (structs.size() > 0 || xceptions.size() > 0) {
+        erl << "-spec struct_get(map()) -> map() | no_return()."
+            << endl << endl;
         generate_struct_api_get(erl, structs);
         generate_struct_api_get(erl, xceptions);
     }
+    else{
+        erl << "-spec struct_get" << ERROR_SPEC << endl << endl;
+    }
     erl << "struct_get(_) -> error(badarg)." << endl << endl;
-    erl << "-spec struct_get_type(map()) -> atom() | no_return()."
-        << endl << endl;
+
     if (structs.size() > 0 || xceptions.size() > 0) {
+        erl << "-spec struct_get_type(map()) -> atom() | no_return()."
+            << endl << endl;
         generate_struct_api_get_type(erl, structs);
         generate_struct_api_get_type(erl, xceptions);
+    }
+    else{
+        erl << "-spec struct_get_type" << ERROR_SPEC << endl << endl;
     }
     erl << "struct_get_type(_) -> error(badarg)." << endl << endl;
     erl << "-spec flags() -> atom()." << endl << endl;
@@ -1159,6 +1170,32 @@ void t_erlang_generator::generate_struct_info(ostream& out, t_struct* tstruct) {
  * Generates the new, get and get_type method for a struct
  */
 
+void t_erlang_generator::generate_struct_api_new_spec(ostream& out, vector<t_struct*> structs, vector<t_struct*> xceptions) {
+    //erl << "-spec struct_new(struct_name() | exception_name(), map()) -> map() | no_return()."
+    indenter ind;
+    out << "-spec struct_new" << ind.nl(1);
+    for(vector<t_struct*>::const_iterator _it = structs.begin(); _it != structs.end(); ++_it)
+    {
+        out << "(" << type_name(*_it) << ", map()) -> " << type_name(*_it) << "()";
+        if(_it + 1 == structs.end() && xceptions.size() == 0){
+            out << ".";
+        }
+        else{
+            out << ";" << ind.nl(1);
+        }
+    }
+    for(vector<t_struct*>::const_iterator _it = xceptions.begin(); _it != xceptions.end(); ++_it)
+    {
+        out << "(" << type_name(*_it) << ", map()) -> " << type_name(*_it) << "()";
+        if(_it + 1 == xceptions.end()){
+            out << ".";
+        }
+        else{
+            out << ";" << ind.nl(1);
+        }
+    }
+    out << endl << endl;
+}
 void t_erlang_generator::generate_struct_api_new(ostream& out, vector<t_struct*> structs) {
     for(vector<t_struct*>::const_iterator _it = structs.begin(); _it != structs.end(); ++_it)
     {
