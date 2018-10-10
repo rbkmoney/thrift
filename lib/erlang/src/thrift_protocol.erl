@@ -115,9 +115,9 @@ read_map(IProto0, Module, StructureName)
          is_atom(StructureName) ->
     {struct, _Flavour, StructDef} = Module:struct_info(StructureName),
     {IProto1, ok} = read_frag(IProto0, struct_begin),
-    DefaultMap = Module:struct_new(StructureName, fill_default_struct_map(StructDef, #{})),
-    {IProto2, RTuple1} = read_struct_loop(IProto1, enumerate(1, StructDef), DefaultMap),
-    {IProto2, {ok, RTuple1}}.
+    {IProto2, RMap} = read_struct_loop(IProto1, enumerate(1, StructDef), fill_default_struct_map(StructDef, #{})),
+    RMap1 = Module:struct_new(StructureName, RMap),
+    {IProto2, {ok, RMap1}}.
 
 construct_default_struct(Tag, StructDef) ->
     case Tag of
@@ -142,7 +142,7 @@ fill_default_struct_map([], Map) ->
 fill_default_struct_map([{_Fid, _Req, _Type, _Name, undefined} | Rest], Map) ->
     fill_default_struct_map(Rest, Map);
 fill_default_struct_map([{_Fid, Req, _Type, _Name, _Default} | Rest], Map)
-    when Req =:= undefined orelse Req =:= optional ->
+    when Req =:= required ->
     fill_default_struct_map(Rest, Map);
 fill_default_struct_map([{_Fid, _Req, _Type, Name, Default} | Rest], Map) ->
     fill_default_struct_map(Rest, Map#{Name => Default}).
