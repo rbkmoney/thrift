@@ -179,10 +179,10 @@ read_frag(IProto, {struct, union, {Module, StructureName}}) when
 read_frag(IProto, {struct, _, {Module, StructureName}}) when
   is_atom(Module), is_atom(StructureName) ->
     %io:format(" start parse - ~p~n", [StructureName]),
-    case erlang:function_exported(Module, struct_new, 2) of
+    case Module:flags() of
         false ->
             io:format(" use read ~n"),
-            read(IProto, Module:struct_info(StructureName), StructureName);
+            read(IProto, Module:struct_info(StructureName), Module:record_name(StructureName));
         true ->
             %io:format(" use read_map ~n"),
             read_map(IProto, Module, StructureName)
@@ -322,45 +322,6 @@ read_struct_loop(IProto0, StructIndex, Fun, Acc) ->
             end
     end.
 
-read_struct_map_loop(IProto0, [{_Fid, _Req, Type, Name, _Default} | Rest], Acc) ->
-    {IProto1, #protocol_field_begin{type = FType, id = Fid}} = read_frag(IProto0, field_begin),
-    case {FType, Fid} of
-        {?tType_STOP, _} ->
-            io:format(" stop read map field Fid - ~p, Type - ~p~n", [Fid, Type]),
-            {IProto2, ok} = read_frag(IProto1, struct_end),
-            {IProto2, Acc};
-        _Else ->
-            case term_to_typeid(Type) of
-                FType ->
-                    %io:format(" read map field Type - ~p~n", [Type]),
-                    {IProto2, {ok, Val}} = read_frag(IProto1, Type),
-                    {IProto3, ok} = read_frag(IProto2, field_end),
-                    read_struct_map_loop(IProto3, Rest, Acc#{Name => Val});
-                _Expected ->
-                    io:format(" need to skip_field ~p~n", [_Expected]),
-                    error_logger:info_msg(
-                        "Skipping field ~p with wrong type: ~p~n",
-                        [Name, typeid_to_atom(FType)]),
-                    skip_field(FType, IProto1, Rest, Acc)
-            end
-    end;
-read_struct_map_loop(IProto0, [], Acc) ->
-    {IProto1, #protocol_field_begin{type = FType, id = Fid}} = read_frag(IProto0, field_begin),
-    io:format(" loop out with data - ~p~n", [Acc]),
-    case {FType, Fid} of
-        {?tType_STOP, _} ->
-            io:format(" stop read map field Fid - ~p~n", [Fid]),
-            {IProto2, ok} = read_frag(IProto1, struct_end),
-            {IProto2, Acc};
-        _Else ->
-            {IProto0, Acc}
-    end.
-
-skip_field(FType, IProto0, StructDef, Acc) when is_map(Acc) ->
-    FTypeAtom = typeid_to_atom(FType),
-    {IProto1, ok} = skip(IProto0, FTypeAtom),
-    {IProto2, ok} = read_frag(IProto1, field_end),
-    read_struct_map_loop(IProto2, StructDef, Acc);
 skip_field(FType, IProto0, StructIndex, Acc) ->
     FTypeAtom = typeid_to_atom(FType),
     {IProto1, ok} = skip(IProto0, FTypeAtom),
@@ -664,10 +625,14 @@ validate(_Req, {{struct, union, StructDef} = Type, Data = {Name, Value}}, Path)
         false ->
             throw({invalid, Path, Type, Data})
     end;
-validate(Req, {{struct, _Flavour, {Mod, Name}}, Data}, Path)
+validate(Req, {{struct, _Flavour, {Mod, Name} = Type}, Data}, Path)
   when is_tuple(Data) ->
-    %io:format("Try valid with mod name - ~p~n", [Data]),
-    validate(Req, {Mod:struct_info(Name), Data}, Path);
+    case Mod:record_name(Name) of
+        RName when RName =:= element(1, Data) ->
+            validate(Req, {Mod:struct_info(Name), Data}, Path);
+        _ ->
+            throw({invalid, Path, Type, Data})
+    end;
 validate(Req, {{struct, _Flavour, {Mod, Name}}, Data}, Path)
   when is_map(Data) ->
     case map_get_type(Mod, Path, Name, Data) =:= Name of
