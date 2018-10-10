@@ -537,8 +537,8 @@ struct_write_loop(Proto0, [{Fid, _Req, Type, _Name, _Default} | RestStructDef], 
 struct_write_loop(Proto, [], []) ->
     write_frag(Proto, field_stop).
 
-struct_write_field(Proto0, {_Fid, _Req, _Type, _Name, Default} = StructDef, undefined) ->
-    struct_write_field(Proto0, StructDef, Default);
+struct_write_field(Proto, _, undefined) ->
+    {Proto, ok};
 struct_write_field(Proto0, {Fid, _Req, Type, _Name, _Default}, Data) ->
     {Proto1, ok} = write_frag(Proto0,
                        #protocol_field_begin{
@@ -577,7 +577,7 @@ validate(map_end) -> ok;
 
 validate(TypeData) ->
     try validate(TypeData, []) catch
-        throw:{invalid, Path, _Type, Value} ->
+        throw:{invalid, Path, Value} ->
             {error, {invalid, lists:reverse(Path), Value}}
     end.
 
@@ -598,29 +598,29 @@ validate(_Req, {{map, KType, VType}, Data}, Path)
     maps:fold(fun (K, V, _) -> validate({KType, K}, Path), validate({VType, V}, Path), ok end, ok, Data);
 validate(Req, {{struct, union, {Mod, Name}}, Data = {_, _}}, Path) ->
     validate(Req, {Mod:struct_info(Name), Data}, Path);
-validate(_Req, {{struct, union, StructDef} = Type, Data = {Name, Value}}, Path)
+validate(_Req, {{struct, union, StructDef}, Data = {Name, Value}}, Path)
   when is_list(StructDef) andalso is_atom(Name) ->
     case lists:keyfind(Name, 4, StructDef) of
         {_, _, SubType, Name, _Default} ->
             validate(required, {SubType, Value}, [Name | Path]);
         false ->
-            throw({invalid, Path, Type, Data})
+            throw({invalid, Path, Data})
     end;
-validate(Req, {{struct, _Flavour, {Mod, Name} = Type}, Data}, Path)
+validate(Req, {{struct, _Flavour, {Mod, Name}}, Data}, Path)
   when is_tuple(Data) ->
     case Mod:record_name(Name) of
         RName when RName =:= element(1, Data) ->
             validate(Req, {Mod:struct_info(Name), Data}, Path);
         _ ->
-            throw({invalid, Path, Type, Data})
+            throw({invalid, Path, Data})
     end;
 validate(Req, {{struct, _Flavour, {Mod, Name}}, Data}, Path)
   when is_map(Data) ->
-    case map_get_type(Mod, Path, Name, Data) =:= Name of
+    case map_get_type(Mod, Path, Data) =:= Name of
         true ->
             validate(Req, {Mod:struct_info(Name), Mod:struct_get(Data)}, Path);
         false ->
-           throw({invalid, Path, Name, Data})
+           throw({invalid, Path, Data})
     end;
 validate(_Req, {{struct, _Flavour, StructDef}, Data}, Path)
   when is_list(StructDef) andalso tuple_size(Data) =:= length(StructDef) + 1 ->
@@ -655,8 +655,8 @@ validate(_Req, {i64, Value}, _Path)
     ok;
 validate(_Req, {double, Value}, _Path) when is_float(Value) ->
     ok;
-validate(_Req, {Type, Value}, Path) ->
-    throw({invalid, Path, Type, Value}).
+validate(_Req, {_, Value}, Path) ->
+    throw({invalid, Path, Value}).
 
 validate_struct_fields(Types, Elems, Path) ->
     lists:foreach(
@@ -677,33 +677,15 @@ validate_struct_map_fields(StructDef, PassedData, Path) ->
     ),
     case maps:size(NewData) =/= 0 of
         true ->
-            throw({invalid, Path, unknown, NewData});
+            throw({invalid, Path, NewData});
         false ->
             ok
     end.
 
-map_get_type(Module, Path, Name, Data) ->
+map_get_type(Module, Path, Data) ->
     try
         Module:struct_get_type(Data)
     catch
-        error:{badarg} ->
-            throw({invalid, Path, Name, Data})
+        error:badarg ->
+            throw({invalid, Path, Data})
     end.
-
-%map_sort_data(Types, Elems) ->
-%    map_sort_data(Types, Elems, []).
-map_sort_data(Types, Elems, Path) ->
-    lists:foldl(
-        fun ({Key, Val}, List) ->
-            case lists:keyfind(Key, 4, Types) of
-                false ->
-                   throw({invalid, Path, Key, Val});
-                Type ->
-                    [{Type, Val} | List]
-            end
-        end,
-        [], Elems).
-
-%false ->
-%throw({miss_req_field, Key});
-%struct_map_write(Proto0, StructDef, Default);
