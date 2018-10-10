@@ -537,6 +537,8 @@ struct_write_loop(Proto0, [{Fid, _Req, Type, _Name, _Default} | RestStructDef], 
 struct_write_loop(Proto, [], []) ->
     write_frag(Proto, field_stop).
 
+struct_write_field(Proto0, {_Fid, _Req, _Type, _Name, Default} = StructDef, undefined) ->
+    struct_write_field(Proto0, StructDef, Default);
 struct_write_field(Proto0, {Fid, _Req, Type, _Name, _Default}, Data) ->
     {Proto1, ok} = write_frag(Proto0,
                        #protocol_field_begin{
@@ -548,12 +550,7 @@ struct_write_field(Proto0, {Fid, _Req, Type, _Name, _Default}, Data) ->
 
 struct_map_write_loop(Proto0, StructDef, Data) ->
     Proto2 = maps:fold(fun (Key, Val, Proto) ->
-        {Proto1, ok} = case lists:keyfind(Key, 1, StructDef) of
-            false ->
-                {Proto, ok};
-            StructDef_ ->
-                struct_write_field(Proto, StructDef_, Val)
-        end,
+        {Proto1, ok} = struct_write_field(Proto, lists:keyfind(Key, 4, StructDef), Val),
         Proto1
     end, Proto0, Data),
     write_frag(Proto2, field_stop).
@@ -672,13 +669,8 @@ validate_struct_fields(Types, Elems, Path) ->
 validate_struct_map_fields(StructDef, PassedData, Path) ->
     NewData = lists:foldl(
         fun ({_, Req, Type, Name, _}, Data) ->
-            case maps:get(Name, Data, undefined) of
-                undefined when Req =:= required ->
-                    throw({invalid, Path, Name, Data});
-                Value ->
-                    validate(Req, {Type, Value}, [Name | Path]),
-                    maps:remove(Name, Data)
-            end
+            validate(Req, {Type, maps:get(Name, Data, undefined)}, [Name | Path]),
+            maps:remove(Name, Data)
         end,
         PassedData,
         StructDef
