@@ -20,6 +20,7 @@
 -module(test_recursive).
 
 -ifdef(TEST).
+
 -include_lib("eunit/include/eunit.hrl").
 
 -include("gen-erlang/recursive_thrift.hrl").
@@ -27,23 +28,30 @@
 encode_decode_recursive_test() ->
   {ok, Transport} = thrift_memory_buffer:new(),
   {ok, Protocol0} = thrift_binary_protocol:new(Transport),
-  TestData = #'CoRec'{other = #'CoRec2'{other = #'CoRec'{}}},
+  TestData = recursive_thrift:struct_new('CoRec',
+    #{other => recursive_thrift:struct_new('CoRec2',
+      #{other => recursive_thrift:struct_new('CoRec', #{})})}),
   {Protocol1, ok} = thrift_protocol:write(Protocol0,
     {{struct, struct, {recursive_thrift, 'CoRec'}},
       TestData}),
   {_Protocol2, {ok, Result}} = thrift_protocol:read(Protocol1,
     {struct, struct, {recursive_thrift, 'CoRec'}}),
-  Result = TestData.
+  ?_assertMatch(TestData, Result).
 
 encode_decode_recursive_2_test() ->
   {ok, Transport} = thrift_memory_buffer:new(),
   {ok, Protocol0} = thrift_binary_protocol:new(Transport),
-  TestData = #'RecTree'{item = 42, children = [#'RecTree'{}, #'RecTree'{item = 31337, children = [#'RecTree'{}]}]},
+  TestData = recursive_thrift:struct_new('RecTree',
+    #{item => 42, children => [
+      recursive_thrift:struct_new('RecTree', #{}),
+      recursive_thrift:struct_new('RecTree',
+        #{item => 31337, children => [recursive_thrift:struct_new('RecTree', #{})]})
+      ]}),
   {Protocol1, ok} = thrift_protocol:write(Protocol0,
     {{struct, struct, {recursive_thrift, 'RecTree'}},
       TestData}),
   {_Protocol2, {ok, Result}} = thrift_protocol:read(Protocol1,
     {struct, struct, {recursive_thrift, 'RecTree'}}),
-  Result = TestData.
+  ?_assertMatch(TestData, Result).
 
 -endif.

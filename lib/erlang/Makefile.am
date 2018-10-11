@@ -23,7 +23,7 @@ THRIFT_FILES = $(wildcard test/*.thrift) \
 		  ../../test/ThriftTest.thrift \
 		  ../../test/Recursive.thrift
 
-ERL_FLAG = erlang
+ERL_FLAG = erlang:use_maps
 
 .generated: $(THRIFT) $(THRIFT_FILES)
 	for f in $(THRIFT_FILES) ; do \

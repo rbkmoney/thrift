@@ -33,125 +33,133 @@ constant_test_() ->
 record_generation_test_() ->
   [
     {"Bonk record", ?_assertMatch(
-      {'Bonk', _, _},
-      #'Bonk'{message=null,type=null}
+      #{'$struct' := 'Bonk', message := null, type := null},
+      thrift_test_thrift:struct_new('Bonk', #{message => null, type => null})
     )},
     {"Bools record", ?_assertMatch(
-      {'Bools', _, _},
-      #'Bools'{im_true=null,im_false=null}
+      #{'$struct' := 'Bools', im_true := null, im_false := null},
+      thrift_test_thrift:struct_new('Bools', #{im_true => null, im_false => null})
     )},
     {"Xtruct record", ?_assertMatch(
-      {'Xtruct', _, _, _, _},
-      #'Xtruct'{string_thing=null,byte_thing=null,i32_thing=null,i64_thing=null}
+      #{'$struct' := 'Xtruct', string_thing := null, byte_thing := null,
+        i32_thing := null, i64_thing := null},
+      thrift_test_thrift:struct_new('Xtruct', #{string_thing => null, byte_thing => null,
+        i32_thing => null, i64_thing => null})
     )},
     {"Xtruct2 record", ?_assertMatch(
-      {'Xtruct2', _, _, _},
-      #'Xtruct2'{byte_thing=null,struct_thing=null,i32_thing=null}
+      #{'$struct' := 'Xtruct2', byte_thing := null, struct_thing := null, i32_thing := null},
+      thrift_test_thrift:struct_new('Xtruct2', #{byte_thing => null,
+        struct_thing => null, i32_thing => null})
     )},
     {"Xtruct3 record", ?_assertMatch(
-      {'Xtruct3', _, _, _, _},
-      #'Xtruct3'{string_thing=null,changed=null,i32_thing=null,i64_thing=null}
+      #{'$struct' := 'Xtruct3', string_thing := null, changed := null,
+        i32_thing := null, i64_thing := null},
+      thrift_test_thrift:struct_new('Xtruct3', #{string_thing => null, changed => null,
+        i32_thing => null, i64_thing => null})
     )},
     {"Insanity record", ?_assertMatch(
-      {'Insanity', _, _},
-      #'Insanity'{userMap=null,xtructs=null}
+      #{'$struct' := 'Insanity', userMap := null, xtructs := null},
+      thrift_test_thrift:struct_new('Insanity', #{userMap => null, xtructs => null})
     )},
     {"CrazyNesting record", ?_assertMatch(
-      {'CrazyNesting', _, _, _, _},
-      #'CrazyNesting'{
-        string_field=null,
-        set_field=null,
-        list_field=null,
-        binary_field=null
-      }
+      #{'$struct' := 'CrazyNesting', string_field := null, set_field := null,
+        list_field := null, binary_field := null},
+      thrift_test_thrift:struct_new('CrazyNesting', #{string_field => null, set_field => null,
+        list_field => null, binary_field => null})
     )},
     {"Xception record", ?_assertMatch(
-      {'Xception', _, _},
-      #'Xception'{errorCode=null,message=null}
+      #{'$struct' := 'Xception', errorCode := null, message := null},
+      thrift_test_thrift:struct_new('Xception', #{errorCode => null, message => null})
     )},
     {"Xception2 record", ?_assertMatch(
-      {'Xception2', _, _},
-      #'Xception2'{errorCode=null,struct_thing=null}
+      #{'$struct' := 'Xception2', errorCode := null, struct_thing := null},
+      thrift_test_thrift:struct_new('Xception2', #{errorCode => null, struct_thing => null})
     )},
-    {"EmptyStruct record", ?_assertMatch({'EmptyStruct'}, #'EmptyStruct'{})},
-    {"OneField record", ?_assertMatch({'OneField', _}, #'OneField'{field=null})},
+    {"EmptyStruct record", ?_assertMatch(
+        #{'$struct' := 'EmptyStruct'},
+        thrift_test_thrift:struct_new('EmptyStruct', #{})
+    )},
+    {"OneField record", ?_assertMatch(
+        #{'$struct' := 'OneField'},
+        thrift_test_thrift:struct_new('OneField', #{field => null})
+    )},
     {"VersioningTestV1 record", ?_assertMatch(
-      {'VersioningTestV1', _, _, _},
-      #'VersioningTestV1'{begin_in_both=null,old_string=null,end_in_both=null}
+      #{'$struct' := 'VersioningTestV1', begin_in_both := null, old_string := null,
+        end_in_both := null},
+      thrift_test_thrift:struct_new('VersioningTestV1', #{begin_in_both => null, old_string => null,
+        end_in_both => null})
     )},
     {"VersioningTestV2 record", ?_assertMatch(
-      {'VersioningTestV2', _, _, _, _, _, _, _, _, _, _, _, _},
-      #'VersioningTestV2'{
-        begin_in_both=null,
-        newint=null,
-        newbyte=null,
-        newshort=null,
-        newlong=null,
-        newdouble=null,
-        newstruct=null,
-        newlist=null,
-        newset=null,
-        newmap=null,
-        newstring=null,
-        end_in_both=null
-      }
+      #{'$struct' := 'VersioningTestV2', begin_in_both := null, newint := null,
+        newbyte := null, newshort := null,
+        newlong := null, newdouble := null,
+        newset := null, newmap := null,
+        newstring := null, end_in_both := null,
+        newstruct := null, newlist := null},
+      thrift_test_thrift:struct_new('VersioningTestV2', #{begin_in_both => null, newint => null,
+        newbyte => null, newshort => null,
+        newlong => null, newdouble => null,
+        newset => null, newmap => null,
+        newstring => null, end_in_both => null,
+        newstruct => null, newlist => null})
     )},
     {"ListTypeVersioningV1 record", ?_assertMatch(
-      {'ListTypeVersioningV1', _, _},
-      #'ListTypeVersioningV1'{myints=null,hello=null}
+      #{'$struct' := 'ListTypeVersioningV1', myints := null, hello := null},
+      thrift_test_thrift:struct_new('ListTypeVersioningV1', #{myints => null, hello => null})
     )},
     {"ListTypeVersioningV2 record", ?_assertMatch(
-      {'ListTypeVersioningV2', _, _},
-      #'ListTypeVersioningV2'{strings=null,hello=null}
+      #{'$struct' := 'ListTypeVersioningV2', strings := null, hello := null},
+      thrift_test_thrift:struct_new('ListTypeVersioningV2', #{strings => null, hello => null})
     )},
     {"GuessProtocolStruct record", ?_assertMatch(
-      {'GuessProtocolStruct', _},
-      #'GuessProtocolStruct'{map_field=null}
+      #{'$struct' := 'GuessProtocolStruct', map_field := null},
+      thrift_test_thrift:struct_new('GuessProtocolStruct', #{map_field => null})
     )},
     {"LargeDeltas record", ?_assertMatch(
-      {'LargeDeltas', _, _, _, _, _, _, _, _, _, _},
-      #'LargeDeltas'{
-        b1=null,
-        b10=null,
-        b100=null,
-        check_true=null,
-        b1000=null,
-        check_false=null,
-        vertwo2000=null,
-        a_set2500=null,
-        vertwo3000=null,
-        big_numbers=null
-      }
+      #{'$struct' := 'LargeDeltas', b1 := null, b10 := null,
+        b100 := null, check_true := null,
+        b1000 := null, check_false := null,
+        vertwo2000 := null, a_set2500 := null,
+        vertwo3000 := null, big_numbers := null},
+      thrift_test_thrift:struct_new('LargeDeltas', #{b1 => null, b10 => null,
+        b100 => null, check_true => null,
+        b1000 => null, check_false => null,
+        vertwo2000 => null, a_set2500 => null,
+        vertwo3000 => null, big_numbers => null})
     )},
     {"NestedListsI32x2 record", ?_assertMatch(
-      {'NestedListsI32x2', _},
-      #'NestedListsI32x2'{integerlist=null}
+      #{'$struct' := 'NestedListsI32x2', integerlist := null},
+      thrift_test_thrift:struct_new('NestedListsI32x2', #{integerlist => null})
     )},
     {"NestedListsI32x3 record", ?_assertMatch(
-      {'NestedListsI32x3', _},
-      #'NestedListsI32x3'{integerlist=null}
+      #{'$struct' := 'NestedListsI32x3', integerlist := null},
+      thrift_test_thrift:struct_new('NestedListsI32x3', #{integerlist => null})
     )},
     {"NestedMixedx2 record", ?_assertMatch(
-      {'NestedMixedx2', _, _, _},
-      #'NestedMixedx2'{
-        int_set_list=null,
-        map_int_strset=null,
-        map_int_strset_list=null
-      }
+      #{'$struct' := 'NestedMixedx2', int_set_list := null, map_int_strset := null,
+        map_int_strset_list := null},
+      thrift_test_thrift:struct_new('NestedMixedx2', #{int_set_list => null, map_int_strset => null,
+        map_int_strset_list => null})
     )},
-    {"ListBonks record", ?_assertMatch({'ListBonks', _}, #'ListBonks'{bonk=null})},
+    {"ListBonks record", ?_assertMatch(
+        #{'$struct' := 'ListBonks'},
+        thrift_test_thrift:struct_new('ListBonks', #{bonk => null})
+    )},
     {"NestedListsBonk record", ?_assertMatch(
-      {'NestedListsBonk', _},
-      #'NestedListsBonk'{bonk=null}
+      #{'$struct' := 'NestedListsBonk', bonk := null},
+      thrift_test_thrift:struct_new('NestedListsBonk', #{bonk => null})
     )},
     {"BoolTest record", ?_assertMatch(
-      {'BoolTest', _, _},
-      #'BoolTest'{b=null,s=null}
+      #{'$struct' := 'BoolTest', b := null, s := null},
+      thrift_test_thrift:struct_new('BoolTest', #{b => null, s => null})
     )},
-    {"StructA record", ?_assertMatch({'StructA', _}, #'StructA'{s=null})},
+    {"StructA record", ?_assertMatch(
+        #{'$struct' := 'StructA'},
+        thrift_test_thrift:struct_new('StructA', #{s => null})
+    )},
     {"StructB record", ?_assertMatch(
-      {'StructB', _, _},
-      #'StructB'{aa=null,ab=null}
+      #{'$struct' := 'StructB', aa := null, ab := null},
+      thrift_test_thrift:struct_new('StructB', #{aa => null, ab => null})
     )}
   ].
 

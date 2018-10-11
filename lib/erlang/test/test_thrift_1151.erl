@@ -6,11 +6,13 @@
 -include_lib("eunit/include/eunit.hrl").
 
 unmatched_struct_test() ->
-  S1 = #'StructC'{x=#'StructB'{x=1}},
+  S1 = thrift1151_thrift:struct_new('StructC',
+    #{x => thrift1151_thrift:struct_new('StructB',
+      #{x => 1})}),
   {ok, Transport} = thrift_memory_buffer:new(),
   {ok, Protocol} = thrift_binary_protocol:new(Transport),
   ?assertEqual(
-    {Protocol, {error, {invalid, [x], #'StructB'{x=1}}}},
+    {Protocol, {error, {invalid, [x], #{'$struct' => 'StructB', x => 1}}}},
     thrift_protocol:write(
       Protocol,
       {{struct, struct, {thrift1151_thrift, 'StructC'}}, S1}
@@ -18,7 +20,9 @@ unmatched_struct_test() ->
   ).
 
 badarg_test() ->
-  S2 = #'StructC'{x=#'StructA'{x="1"}},
+  S2 = thrift1151_thrift:struct_new('StructC',
+    #{x => thrift1151_thrift:struct_new('StructA',
+      #{x => "1"})}),
   {ok, Transport} = thrift_memory_buffer:new(),
   {ok, Protocol} = thrift_binary_protocol:new(Transport),
   ?assertEqual(
@@ -30,7 +34,7 @@ badarg_test() ->
   ).
 
 union_test() ->
-  S1 = {a, #'StructA'{x = 1}},
+  S1 = {a, thrift1151_thrift:struct_new('StructA', #{x => 1})},
   {ok, Transport} = thrift_memory_buffer:new(),
   {ok, Protocol} = thrift_binary_protocol:new(Transport),
   ?assertMatch(
@@ -42,7 +46,7 @@ union_test() ->
   ).
 
 union_badarg_test() ->
-  S1 = {a, S2 = #'StructB'{x = 42}},
+  S1 = {a, S2 = thrift1151_thrift:struct_new('StructB', #{x => 42})},
   {ok, Transport} = thrift_memory_buffer:new(),
   {ok, Protocol} = thrift_binary_protocol:new(Transport),
   ?assertEqual(

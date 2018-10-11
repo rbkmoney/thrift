@@ -93,7 +93,7 @@ term_to_typeid({list, _}) -> ?tType_LIST.
 
 %% Structure is like:
 %%    [{Fid, Type}, ...]
--spec read(#protocol{}, {struct, _Flavour, _StructDef}, atom()) -> {#protocol{}, {ok, tuple()}}.
+-spec read(#protocol{}, {struct, _Flavour, _StructDef}, atom()) -> {#protocol{}, {ok, tuple() | map()}}.
 read(IProto0, {struct, union, StructDef}, _Tag)
   when is_list(StructDef) ->
     {IProto1, RTuple} = read_union_loop(IProto0, enumerate(1, StructDef)),
@@ -109,6 +109,16 @@ read(IProto0, {struct, _, StructDef}, Tag)
     {IProto2, RTuple1} = read_struct_loop(IProto1, enumerate(Offset + 1, StructDef), RTuple0),
     {IProto2, {ok, RTuple1}}.
 
+-spec read_map(#protocol{}, module(), atom()) -> {#protocol{}, {ok, map()}}.
+read_map(IProto0, Module, StructureName)
+    when is_atom(Module),
+         is_atom(StructureName) ->
+    {struct, _Flavour, StructDef} = Module:struct_info(StructureName),
+    {IProto1, ok} = read_frag(IProto0, struct_begin),
+    {IProto2, RMap} = read_struct_loop(IProto1, enumerate(1, StructDef), fill_default_struct_map(StructDef, #{})),
+    RMap1 = Module:struct_new(StructureName, RMap),
+    {IProto2, {ok, RMap1}}.
+
 construct_default_struct(Tag, StructDef) ->
     case Tag of
         undefined ->
@@ -121,10 +131,21 @@ construct_default_struct(Tag, StructDef) ->
             {1, fill_default_struct(2, StructDef, erlang:setelement(1, Tuple, Tag))}
     end.
 
+
 fill_default_struct(_N, [], Record) ->
     Record;
 fill_default_struct(N, [{_Fid, _Req, _Type, _Name, Default} | Rest], Record) ->
     fill_default_struct(N + 1, Rest, erlang:setelement(N, Record, Default)).
+
+fill_default_struct_map([], Map) ->
+    Map;
+fill_default_struct_map([{_Fid, _Req, _Type, _Name, undefined} | Rest], Map) ->
+    fill_default_struct_map(Rest, Map);
+fill_default_struct_map([{_Fid, Req, _Type, _Name, _Default} | Rest], Map)
+    when Req =:= required ->
+    fill_default_struct_map(Rest, Map);
+fill_default_struct_map([{_Fid, _Req, _Type, Name, Default} | Rest], Map) ->
+    fill_default_struct_map(Rest, Map#{Name => Default}).
 
 enumerate(N, [{Fid, _Req, Type, Name, _Default} | Rest]) ->
     [{N, Fid, Type, Name} | enumerate(N + 1, Rest)];
@@ -155,8 +176,12 @@ read_frag(IProto, {struct, union, {Module, StructureName}}) when
     read(IProto, Module:struct_info(StructureName), undefined);
 read_frag(IProto, {struct, _, {Module, StructureName}}) when
   is_atom(Module), is_atom(StructureName) ->
-    read(IProto, Module:struct_info(StructureName), Module:record_name(StructureName));
-
+    case lists:any(fun(structs_as_maps) -> true end, Module:flags()) of
+        false ->
+            read(IProto, Module:struct_info(StructureName), Module:record_name(StructureName));
+        true ->
+            read_map(IProto, Module, StructureName)
+    end;
 read_frag(IProto, S={struct, _, Structure}) when is_list(Structure) ->
     read(IProto, S, undefined);
 
@@ -240,6 +265,13 @@ read_set_loop(Proto0, _ValType, 0, Set) ->
 read_set_loop(Proto0, ValType, Left, Set) ->
     {Proto1, {ok, Val}} = read_frag(Proto0, ValType),
     read_set_loop(Proto1, ValType, Left - 1, ordsets:add_element(Val, Set)).
+
+read_struct_loop(IProto0, StructIndex, RMap) when is_map(RMap)->
+  read_struct_loop(
+    IProto0, StructIndex,
+    fun ({_, Name, Val}, Was) -> Was#{Name => Val} end,
+    RMap
+  );
 
 read_struct_loop(IProto0, StructIndex, RTuple) ->
   read_struct_loop(
@@ -376,7 +408,9 @@ skip_list_loop(Proto0, Map = #protocol_list_begin{etype = Etype, size = Size}) -
 
 write(Proto, TypeData) ->
     case validate(TypeData) of
-        ok -> write_frag(Proto, TypeData);
+        ok ->
+            {Protocol1, ok} = write_frag(Proto, TypeData),
+            {Protocol1, ok};
         Error -> {Proto, Error}
     end.
 
@@ -393,6 +427,13 @@ write_frag(Proto0, {{struct, _, StructDef}, Data}, StructName)
     {Proto1, ok} = write_frag(Proto0, #protocol_struct_begin{name = StructName}),
     {Proto2, ok} = struct_write_loop(Proto1, StructDef, Elems),
     {Proto3, ok} = write_frag(Proto2, struct_end),
+    {Proto3, ok};
+
+write_frag(Proto0, {{struct, _, StructDef}, Data}, StructName)
+  when is_list(StructDef), is_map(Data) ->
+    {Proto1, ok} = write_frag(Proto0, #protocol_struct_begin{name = StructName}),
+    {Proto2, ok} = struct_map_write_loop(Proto1, StructDef, Data),
+    {Proto3, ok} = write_frag(Proto2, struct_end),
     {Proto3, ok}.
 
 %% thrift client specific stuff
@@ -403,6 +444,12 @@ write_frag(Proto0, {{struct, _, StructDef}, Data})
     {Proto2, ok} = struct_write_loop(Proto1, StructDef, Elems),
     {Proto3, ok} = write_frag(Proto2, struct_end),
     {Proto3, ok};
+
+write_frag(Proto, {{struct, _, {Module, StructureName}}, Data})
+  when is_atom(Module),
+       is_atom(StructureName),
+       is_map(Data) ->
+    write_frag(Proto, {Module:struct_info(StructureName), Module:struct_get(Data)}, StructureName);
 
 write_frag(Proto, {{struct, _, {Module, StructureName}}, Data})
   when is_atom(Module),
@@ -490,6 +537,24 @@ struct_write_loop(Proto0, [{Fid, _Req, Type, _Name, _Default} | RestStructDef], 
 struct_write_loop(Proto, [], []) ->
     write_frag(Proto, field_stop).
 
+struct_write_field(Proto, _, undefined) ->
+    {Proto, ok};
+struct_write_field(Proto0, {Fid, _Req, Type, _Name, _Default}, Data) ->
+    {Proto1, ok} = write_frag(Proto0,
+                       #protocol_field_begin{
+                         type = term_to_typeid(Type),
+                         id = Fid
+                        }),
+    {Proto2, ok} = write_frag(Proto1, {Type, Data}),
+    write_frag(Proto2, field_end).
+
+struct_map_write_loop(Proto0, StructDef, Data) ->
+    Proto2 = maps:fold(fun (Key, Val, Proto) ->
+        {Proto1, ok} = struct_write_field(Proto, lists:keyfind(Key, 4, StructDef), Val),
+        Proto1
+    end, Proto0, Data),
+    write_frag(Proto2, field_stop).
+
 -spec validate(tprot_header_val() | tprot_header_tag() | tprot_empty_tag() | field_stop | TypeData) ->
     ok | {error, {invalid, Location :: [atom()], Value :: term()}} when
         TypeData :: {Type, Data},
@@ -512,7 +577,7 @@ validate(map_end) -> ok;
 
 validate(TypeData) ->
     try validate(TypeData, []) catch
-        throw:{invalid, Path, _Type, Value} ->
+        throw:{invalid, Path, Value} ->
             {error, {invalid, lists:reverse(Path), Value}}
     end.
 
@@ -533,21 +598,29 @@ validate(_Req, {{map, KType, VType}, Data}, Path)
     maps:fold(fun (K, V, _) -> validate({KType, K}, Path), validate({VType, V}, Path), ok end, ok, Data);
 validate(Req, {{struct, union, {Mod, Name}}, Data = {_, _}}, Path) ->
     validate(Req, {Mod:struct_info(Name), Data}, Path);
-validate(_Req, {{struct, union, StructDef} = Type, Data = {Name, Value}}, Path)
+validate(_Req, {{struct, union, StructDef}, Data = {Name, Value}}, Path)
   when is_list(StructDef) andalso is_atom(Name) ->
     case lists:keyfind(Name, 4, StructDef) of
         {_, _, SubType, Name, _Default} ->
             validate(required, {SubType, Value}, [Name | Path]);
         false ->
-            throw({invalid, Path, Type, Data})
+            throw({invalid, Path, Data})
     end;
-validate(Req, {{struct, _Flavour, {Mod, Name} = Type}, Data}, Path)
+validate(Req, {{struct, _Flavour, {Mod, Name}}, Data}, Path)
   when is_tuple(Data) ->
     case Mod:record_name(Name) of
-      RName when RName =:= element(1, Data) ->
-        validate(Req, {Mod:struct_info(Name), Data}, Path);
-      _ ->
-        throw({invalid, Path, Type, Data})
+        RName when RName =:= element(1, Data) ->
+            validate(Req, {Mod:struct_info(Name), Data}, Path);
+        _ ->
+            throw({invalid, Path, Data})
+    end;
+validate(Req, {{struct, _Flavour, {Mod, Name}}, Data}, Path)
+  when is_map(Data) ->
+    case map_get_type(Mod, Path, Data) =:= Name of
+        true ->
+            validate(Req, {Mod:struct_info(Name), Mod:struct_get(Data)}, Path);
+        false ->
+           throw({invalid, Path, Data})
     end;
 validate(_Req, {{struct, _Flavour, StructDef}, Data}, Path)
   when is_list(StructDef) andalso tuple_size(Data) =:= length(StructDef) + 1 ->
@@ -556,6 +629,9 @@ validate(_Req, {{struct, _Flavour, StructDef}, Data}, Path)
 validate(_Req, {{struct, _Flavour, StructDef}, Data}, Path)
   when is_list(StructDef) andalso tuple_size(Data) =:= length(StructDef) ->
     validate_struct_fields(StructDef, tuple_to_list(Data), Path);
+validate(_Req, {{struct, _Flavour, StructDef}, Data}, Path)
+  when is_list(StructDef) andalso is_map(Data) ->
+    validate_struct_map_fields(StructDef, Data, Path);
 validate(_Req, {{enum, _Fields}, Value}, _Path) when is_atom(Value), Value =/= undefined ->
     ok;
 validate(_Req, {string, Value}, _Path) when is_binary(Value) ->
@@ -579,8 +655,8 @@ validate(_Req, {i64, Value}, _Path)
     ok;
 validate(_Req, {double, Value}, _Path) when is_float(Value) ->
     ok;
-validate(_Req, {Type, Value}, Path) ->
-    throw({invalid, Path, Type, Value}).
+validate(_Req, {_, Value}, Path) ->
+    throw({invalid, Path, Value}).
 
 validate_struct_fields(Types, Elems, Path) ->
     lists:foreach(
@@ -589,3 +665,27 @@ validate_struct_fields(Types, Elems, Path) ->
         end,
         lists:zip(Types, Elems)
     ).
+
+validate_struct_map_fields(StructDef, PassedData, Path) ->
+    NewData = lists:foldl(
+        fun ({_, Req, Type, Name, _}, Data) ->
+            validate(Req, {Type, maps:get(Name, Data, undefined)}, [Name | Path]),
+            maps:remove(Name, Data)
+        end,
+        PassedData,
+        StructDef
+    ),
+    case maps:size(NewData) =/= 0 of
+        true ->
+            throw({invalid, Path, NewData});
+        false ->
+            ok
+    end.
+
+map_get_type(Module, Path, Data) ->
+    try
+        Module:struct_get_type(Data)
+    catch
+        error:badarg ->
+            throw({invalid, Path, Data})
+    end.
