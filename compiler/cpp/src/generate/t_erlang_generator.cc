@@ -1015,13 +1015,13 @@ void t_erlang_generator::generate_struct_metadata(std::ostream& erl, std::ostrea
         erl << "-spec struct_get_type" << ERROR_SPEC << endl << endl;
     }
     erl << "struct_get_type(_) -> error(badarg)." << endl << endl;
-    erl << "-spec flags() -> atom()." << endl << endl;
-    erl << "flags() -> true." << endl << endl;
+    erl << "-spec flags() -> list()." << endl << endl;
+    erl << "flags() -> [structs_as_maps]." << endl << endl;
   }
   else
   {
-    erl << "-spec flags() -> atom()." << endl << endl;
-    erl << "flags() -> false." << endl << endl;
+    erl << "-spec flags() -> list()." << endl << endl;
+    erl << "flags() -> []." << endl << endl;
   }
 }
 

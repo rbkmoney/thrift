@@ -176,7 +176,7 @@ read_frag(IProto, {struct, union, {Module, StructureName}}) when
     read(IProto, Module:struct_info(StructureName), undefined);
 read_frag(IProto, {struct, _, {Module, StructureName}}) when
   is_atom(Module), is_atom(StructureName) ->
-    case Module:flags() of
+    case lists:any(fun(structs_as_maps) -> true end, Module:flags()) of
         false ->
             read(IProto, Module:struct_info(StructureName), Module:record_name(StructureName));
         true ->
