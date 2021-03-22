@@ -39,6 +39,13 @@ enum _ThriftSocketProperties
 
 G_DEFINE_TYPE(ThriftSocket, thrift_socket, THRIFT_TYPE_TRANSPORT)
 
+/* declare used functions */
+gboolean
+thrift_socket_open (ThriftTransport *transport, GError **error);
+gboolean
+thrift_socket_close (ThriftTransport *transport, GError **error);
+
+
 /* implements thrift_transport_is_open */
 gboolean
 thrift_socket_is_open (ThriftTransport *transport)
@@ -129,7 +136,7 @@ thrift_socket_open (ThriftTransport *transport, GError **error)
   memset (&pin, 0, sizeof(pin));
   pin.sin_family = AF_INET;
   pin.sin_addr.s_addr = ((struct in_addr *) (hp->h_addr))->s_addr;
-  pin.sin_port = htons (tsocket->port); 
+  pin.sin_port = htons (tsocket->port);
 
   /* create the socket */
   if ((tsocket->sd = socket (AF_INET, SOCK_STREAM, 0)) == -1)
@@ -210,7 +217,7 @@ thrift_socket_read_end (ThriftTransport *transport, GError **error)
 
 /* implements thrift_transport_write */
 gboolean
-thrift_socket_write (ThriftTransport *transport, const gpointer buf,     
+thrift_socket_write (ThriftTransport *transport, const gpointer buf,
                      const guint32 len, GError **error)
 {
   gint ret = 0;

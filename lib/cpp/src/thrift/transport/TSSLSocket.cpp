@@ -108,7 +108,7 @@ void initializeOpenSSL() {
   SSL_library_init();
   SSL_load_error_strings();
   // static locking
-  mutexes = boost::shared_array<Mutex>(new Mutex[ ::CRYPTO_num_locks()]);
+  mutexes = boost::shared_array<Mutex>(new Mutex[ CRYPTO_num_locks()]);
   if (mutexes == NULL) {
     throw TTransportException(TTransportException::INTERNAL_ERROR,
                               "initializeOpenSSL() failed, "
