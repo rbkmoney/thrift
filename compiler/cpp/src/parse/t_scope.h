@@ -70,7 +70,7 @@ public:
 
   void resolve_const_value(t_const_value* const_val, t_type* ttype) {
     if (ttype->is_map()) {
-      const std::map<t_const_value*, t_const_value*>& map = const_val->get_map();
+      const std::map<t_const_value*, t_const_value*, t_const_value::value_compare>& map = const_val->get_map();
       std::map<t_const_value*, t_const_value*>::const_iterator v_iter;
       for (v_iter = map.begin(); v_iter != map.end(); ++v_iter) {
         resolve_const_value(v_iter->first, ((t_map*)ttype)->get_key_type());
@@ -84,7 +84,7 @@ public:
       }
     } else if (ttype->is_struct()) {
       t_struct* tstruct = (t_struct*)ttype;
-      const std::map<t_const_value*, t_const_value*>& map = const_val->get_map();
+      const std::map<t_const_value*, t_const_value*, t_const_value::value_compare>& map = const_val->get_map();
       std::map<t_const_value*, t_const_value*>::const_iterator v_iter;
       for (v_iter = map.begin(); v_iter != map.end(); ++v_iter) {
         t_field* field = tstruct->get_field_by_name(v_iter->first->get_string());
@@ -125,7 +125,7 @@ public:
             throw "Constants cannot be of type VOID";
           }
         } else if (const_type->is_map()) {
-          const std::map<t_const_value*, t_const_value*>& map = constant->get_value()->get_map();
+          const std::map<t_const_value*, t_const_value*, t_const_value::value_compare>& map = const_val->get_map();
           std::map<t_const_value*, t_const_value*>::const_iterator v_iter;
 
           const_val->set_map();

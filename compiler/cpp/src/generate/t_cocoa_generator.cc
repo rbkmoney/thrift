@@ -2730,7 +2730,7 @@ void t_cocoa_generator::print_const_value(ostream& out,
     indent(out);
     const vector<t_field*>& fields = ((t_struct*)type)->get_members();
     vector<t_field*>::const_iterator f_iter;
-    const map<t_const_value*, t_const_value*>& val = value->get_map();
+    const map<t_const_value*, t_const_value*, t_const_value::value_compare>& val = value->get_map();
     map<t_const_value*, t_const_value*>::const_iterator v_iter;
     if (defval)
       out << type_name(type) << " ";
@@ -2755,7 +2755,7 @@ void t_cocoa_generator::print_const_value(ostream& out,
     indent(mapout);
     t_type* ktype = ((t_map*)type)->get_key_type();
     t_type* vtype = ((t_map*)type)->get_val_type();
-    const map<t_const_value*, t_const_value*>& val = value->get_map();
+    const map<t_const_value*, t_const_value*, t_const_value::value_compare>& val = value->get_map();
     map<t_const_value*, t_const_value*>::const_iterator v_iter;
     if (defval)
       mapout << type_name(type) << " ";

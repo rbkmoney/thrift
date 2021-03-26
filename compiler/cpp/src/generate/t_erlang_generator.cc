@@ -725,7 +725,7 @@ string t_erlang_generator::render_const_value(t_type* type, std::string name, t_
   } else if (type->is_enum()) {
     out << atomify(((t_enum *)(type))->get_constant_by_value(value->get_integer())->get_name());
   } else if (type->is_struct() && ((t_struct*)type)->is_union()) {
-    const map<t_const_value*, t_const_value*>& val = value->get_map();
+    const map<t_const_value*, t_const_value*, t_const_value::value_compare>& val = value->get_map();
     map<t_const_value*, t_const_value*>::const_iterator v_iter = val.begin();
     if (val.size() != 1) {
       throw "compiler error: '" + name + "' - only one member is allowed for Union type";
@@ -753,7 +753,7 @@ string t_erlang_generator::render_const_value(t_type* type, std::string name, t_
       out << ind.nlup();
       const vector<t_field*>& fields = ((t_struct*)type)->get_members();
       vector<t_field*>::const_iterator f_iter;
-      const map<t_const_value*, t_const_value*>& val = value->get_map();
+      const map<t_const_value*, t_const_value*, t_const_value::value_compare>& val = value->get_map();
       map<t_const_value*, t_const_value*>::const_iterator v_iter;
 
       bool first = true;

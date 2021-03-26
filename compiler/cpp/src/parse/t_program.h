@@ -343,6 +343,10 @@ public:
 
   const std::vector<std::string>& get_c_includes() { return c_includes_; }
 
+  void set_recursive(const bool recursive) { recursive_ = recursive; }
+
+  bool get_recursive() const { return recursive_; }
+
 private:
   // File path
   std::string path_;
@@ -388,6 +392,9 @@ private:
 
   // C extra includes
   std::vector<std::string> c_includes_;
+
+  // Recursive code generation
+  bool recursive_;  
 };
 
 #endif

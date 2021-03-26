@@ -424,7 +424,7 @@ string t_hs_generator::render_const_value(t_type* type, t_const_value* value) {
     out << "default_" << cname << "{";
 
     const vector<t_field*>& fields = ((t_struct*)type)->get_members();
-    const map<t_const_value*, t_const_value*>& val = value->get_map();
+    const map<t_const_value*, t_const_value*, t_const_value::value_compare>& val = value->get_map();
 
     bool first = true;
     for (map<t_const_value*, t_const_value*>::const_iterator v_iter = val.begin();
@@ -458,7 +458,7 @@ string t_hs_generator::render_const_value(t_type* type, t_const_value* value) {
     t_type* ktype = ((t_map*)type)->get_key_type();
     t_type* vtype = ((t_map*)type)->get_val_type();
 
-    const map<t_const_value*, t_const_value*>& val = value->get_map();
+    const map<t_const_value*, t_const_value*, t_const_value::value_compare>& val = value->get_map();
     map<t_const_value*, t_const_value*>::const_iterator v_iter;
 
     out << "(Map.fromList [";

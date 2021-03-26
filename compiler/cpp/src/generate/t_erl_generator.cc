@@ -507,7 +507,7 @@ string t_erl_generator::render_const_value(t_type* type, t_const_value* value) {
     out << "#" << type_name(type) << "{";
     const vector<t_field*>& fields = ((t_struct*)type)->get_members();
     vector<t_field*>::const_iterator f_iter;
-    const map<t_const_value*, t_const_value*>& val = value->get_map();
+    const map<t_const_value*, t_const_value*, t_const_value::value_compare>& val = value->get_map();
     map<t_const_value*, t_const_value*>::const_iterator v_iter;
 
     bool first = true;
@@ -543,7 +543,7 @@ string t_erl_generator::render_const_value(t_type* type, t_const_value* value) {
     } else {
       out << "dict:from_list([";
     }
-    map<t_const_value*, t_const_value*>::const_iterator i, end = value->get_map().end();
+    map<t_const_value*, t_const_value*, t_const_value::value_compare>::const_iterator i, end = value->get_map().end();
     for (i = value->get_map().begin(); i != end;) {
       out << "{" << render_const_value(ktype, i->first) << ","
           << render_const_value(vtype, i->second) << "}";
